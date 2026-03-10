@@ -4,7 +4,11 @@ on:
   push:
     branches: [ master ]
   pull_request:
+<<<<<<< HEAD
     branches: [ master]
+=======
+    branches: [ master ]
+>>>>>>> c40bae0317dec0cfede2910d5a0cafe68dbf7dfb
   workflow_dispatch:
 
 jobs:
