@@ -38,12 +38,12 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Capacitor
-        run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
-          npx cap init "Bulk Meter Reader" "com.bulkmeter.app" --web-dir build
-          npx cap add android
-          npx cap sync
+       - name: Install Capacitor
+         run: |
+           npm install @capacitor/core @capacitor/cli @capacitor/android
+           npx cap init --web-dir build
+           npx cap add android
+           npx cap sync
 
       - name: Build APK
         run: |
