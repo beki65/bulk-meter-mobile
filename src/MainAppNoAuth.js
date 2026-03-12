@@ -313,8 +313,7 @@ export default function MainApp() {
       date: new Date().toISOString().split('T')[0],
       synced: false,
       isOutlet: isOutlet,
-      userId: user?._id,
-      userName: user?.name
+      
     };
 
     console.log('💾 Saving reading:', readingData);
@@ -354,8 +353,7 @@ export default function MainApp() {
         timestamp: reading.timestamp,
         date: reading.date,
         pointType: reading.isOutlet ? 'outlet' : 'inlet',
-        userId: reading.userId,
-        userName: reading.userName
+        
       });
 
       // Track data usage (approximate size of request)
