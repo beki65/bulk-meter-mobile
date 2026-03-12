@@ -1,15 +1,12 @@
 // Configuration for different environments
 const ENV = {
   development: {
-    API_URL: 'http://192.168.1.16:8000/api',  // Your current IP
+    API_URL: 'http://192.168.1.16:8000/api', // For local testing
   },
   production: {
-    API_URL: 'https://your-deployed-backend.com/api',  // When you deploy to cloud
-  },
-  ngrok: {
-    API_URL: 'https://abc123.ngrok.io/api',  // Your ngrok URL
+    API_URL: 'https://bulk-meter-mobile.onrender.com/api', // <-- YOUR LIVE RENDER URL
   }
 };
 
-// Change this based on where you're deploying
-export const API_URL = ENV.ngrok.API_URL;  // or ENV.production.API_URL
+// Use production for the APK build
+export const API_URL = ENV.production.API_URL;

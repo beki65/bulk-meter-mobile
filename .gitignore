@@ -15,7 +15,7 @@ ios/
 # Remote .gitignore content
 # Dependencies
 node_modules/
-package-lock.json
+
 
 # Build outputs
 build/
