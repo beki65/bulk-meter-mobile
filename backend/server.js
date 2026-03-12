@@ -15,23 +15,27 @@ connectDB();
 const app = express();
 
 // Middleware - MUST be BEFORE any routes
-app.use(cors({
+// CORS configuration - Allow Capacitor app
+// CORS configuration - Allow Capacitor app
+const corsOptions = {
   origin: [
     'http://localhost:3000',
     'http://localhost:3001',
-    'http://192.168.1.16:3000',
-    'http://192.168.1.16:3001',
-    'https://water-utility-backend.onrender.com',
     'capacitor://localhost',
-    'http://localhost'
+    'ionic://localhost',
+    'https://localhost',          // 👈 CRITICAL for Capacitor 6
+    'http://localhost',
+    'https://bulk-meter-mobile.onrender.com'    // Your actual Render URL
   ],
-  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
 
-app.use(express.json());  // This parses JSON bodies
-app.use(express.urlencoded({ extended: true })); // Also add this for form data
+// Enable preflight requests for all routes
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 
 // Log all requests (after body parsing)
 app.use((req, res, next) => {
