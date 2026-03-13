@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const app = express();
 const axios = require('axios');
 const dotenv = require('dotenv');
 const connectDB = require('./config/database');
@@ -12,10 +13,7 @@ dotenv.config();
 // Connect to MongoDB
 connectDB();
 
-const app = express();
-
 // Middleware - MUST be BEFORE any routes
-// CORS configuration - Allow Capacitor app
 // CORS configuration - Allow Capacitor app
 const corsOptions = {
   origin: [
@@ -23,9 +21,9 @@ const corsOptions = {
     'http://localhost:3001',
     'capacitor://localhost',
     'ionic://localhost',
-    'https://localhost',          // 👈 CRITICAL for Capacitor 6
+    'https://localhost',
     'http://localhost',
-    'https://bulk-meter-mobile.onrender.com'    // Your actual Render URL
+    'https://bulk-meter-mobile.onrender.com'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
@@ -33,17 +31,23 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
+// Apply CORS middleware (once, with options)
+app.use(cors(corsOptions));
+
+// Parse JSON bodies (make sure this is after CORS)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
 // Enable preflight requests for all routes
 app.options('*', cors(corsOptions));
-app.use(cors(corsOptions));
 
 // Log all requests (after body parsing)
 app.use((req, res, next) => {
-    console.log(`📡 ${new Date().toISOString()} - ${req.method} ${req.url}`);
-    console.log('Request body:', req.body); // Add this to see if body is received
-    next();
+  console.log(`📡 ${new Date().toISOString()} - ${req.method} ${req.url}`);
+  console.log('Headers:', req.headers['content-type']);
+  console.log('Body:', req.body);
+  next();
 });
-
 // ============= API ROUTES =============
 
 // Auth routes
