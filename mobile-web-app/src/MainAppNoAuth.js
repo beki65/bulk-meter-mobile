@@ -41,7 +41,6 @@ import {
   Sync as SyncIcon,
   WifiOff as OfflineIcon,
   Delete as DeleteIcon,
-  Refresh as RefreshIcon,
   NetworkCheck as NetworkIcon,
   DataUsage as DataIcon,
   Warning as WarningIcon
@@ -200,7 +199,7 @@ export default function MainApp() {
   const [dataUsageDialogOpen, setDataUsageDialogOpen] = useState(false);
  
   
-  const { networkType, isConnected, isMetered, connectionSpeed } = useNetworkStatus();
+  const { networkType, isMetered, connectionSpeed } = useNetworkStatus();
   const { dataUsage, trackDataUsage, resetDataUsage } = useDataUsage();
 
   // Network status
