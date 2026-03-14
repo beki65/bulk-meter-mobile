@@ -80,7 +80,7 @@ const DEFAULT_DMAS = [
   }
 ];
 
-const API_URL = 'http://192.168.1.16:8000/api';
+const API_URL = 'http://192.168.1.111:8000/api';
 
 export default function DMAHistory() {
   const [viewMode, setViewMode] = useState('cards');
@@ -109,84 +109,61 @@ export default function DMAHistory() {
     return () => clearInterval(interval);
   }, []);
 
- const fetchDMAData = async () => {
-  setLoading(true);
-  try {
-    // Fetch DMA history from backend
-    const response = await axios.get(`${API_URL}/dma/history`);
-    console.log('📊 DMA History Response:', response.data);
-    
-    // Fetch ALL readings
-    const readingsResponse = await axios.get(`${API_URL}/bulk-readings`);
-    console.log('📊 All Readings Response:', readingsResponse.data);
-    
-    // Create a map of latest readings
-    const latestReadings = {};
-    readingsResponse.data.forEach(reading => {
-      const key = `${reading.dmaId}-${reading.pointName}`;
-      console.log(`Processing reading: ${key} = ${reading.meterReading} at ${reading.timestamp}`);
+  const fetchDMAData = async () => {
+    setLoading(true);
+    try {
+      // Fetch DMA history from backend
+      const response = await axios.get(`${API_URL}/dma/history`);
+      console.log('📊 Live DMA Data:', response.data);
       
-      if (!latestReadings[key] || new Date(reading.timestamp) > new Date(latestReadings[key].timestamp)) {
-        latestReadings[key] = {
-          value: reading.meterReading,
-          timestamp: reading.timestamp,
-          type: reading.pointType || 'inlet'
-        };
+      if (response.data && response.data.zones) {
+        // Merge backend data with our default DMAs to preserve colors and structure
+        const updatedZones = DEFAULT_DMAS.map(defaultZone => {
+          const backendZone = response.data.zones.find(z => z.id === defaultZone.id);
+          
+          if (backendZone) {
+            // Update inlets with last readings
+            const updatedInlets = defaultZone.inlets.map(inlet => {
+              const backendInlet = backendZone.inlets?.find(i => i.name === inlet.name);
+              return {
+                ...inlet,
+                lastReading: backendInlet?.lastReading || null,
+                status: backendInlet?.status || inlet.status,
+                flowRate: backendInlet?.flowRate || null
+              };
+            });
+
+            // Update outlets with last readings
+            const updatedOutlets = defaultZone.outlets.map(outlet => {
+              const backendOutlet = backendZone.outlets?.find(o => o.name === outlet.name);
+              return {
+                ...outlet,
+                lastReading: backendOutlet?.lastReading || null,
+                status: backendOutlet?.status || outlet.status,
+                flowRate: backendOutlet?.flowRate || null
+              };
+            });
+
+            return {
+              ...defaultZone,
+              inlets: updatedInlets,
+              outlets: updatedOutlets,
+              status: backendZone.status || defaultZone.status
+            };
+          }
+          return defaultZone;
+        });
+
+        setDmaData({ zones: updatedZones });
+        setError(null);
       }
-    });
-    
-    console.log('📊 Latest Readings Map:', latestReadings);
-    
-    // Check specific keys we care about
-    console.log('Bulk Didly reading:', latestReadings['DMA-JFR-Bulk Didly']);
-    console.log('Tel reading:', latestReadings['DMA-JFR-Tel']);
-    
-    if (response.data && response.data.zones) {
-      const updatedZones = DEFAULT_DMAS.map(defaultZone => {
-        console.log(`Processing zone: ${defaultZone.name}`);
-        
-        const updatedInlets = defaultZone.inlets.map(inlet => {
-          const key = `${defaultZone.id}-${inlet.name}`;
-          const reading = latestReadings[key];
-          console.log(`Inlet ${inlet.name} key: ${key}, reading:`, reading);
-          
-          return {
-            ...inlet,
-            lastReading: reading || null,
-            status: reading ? 'active' : 'pending'
-          };
-        });
-
-        const updatedOutlets = defaultZone.outlets.map(outlet => {
-          const key = `${defaultZone.id}-${outlet.name}`;
-          const reading = latestReadings[key];
-          console.log(`Outlet ${outlet.name} key: ${key}, reading:`, reading);
-          
-          return {
-            ...outlet,
-            lastReading: reading || null,
-            status: reading ? 'active' : 'pending'
-          };
-        });
-
-        return {
-          ...defaultZone,
-          inlets: updatedInlets,
-          outlets: updatedOutlets
-        };
-      });
-
-      console.log('📊 Final Updated Zones:', updatedZones);
-      setDmaData({ zones: updatedZones });
-      setError(null);
+    } catch (err) {
+      console.error('❌ Failed to fetch DMA data:', err);
+      setError('Using offline data - Server connection failed');
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error('❌ Failed to fetch DMA data:', err);
-    setError('Using offline data - Server connection failed');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleAddNote = () => {
     if (newNote.trim() && selectedDMA) {
