@@ -24,6 +24,7 @@ const corsOptions = {
     'https://localhost',
     'http://localhost',
     'https://bulk-meter-mobile.onrender.com'
+    'https://dmadashboard.netlify.app'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
