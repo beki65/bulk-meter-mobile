@@ -41,10 +41,7 @@ import {
   Sync as SyncIcon,
   WifiOff as OfflineIcon,
   Delete as DeleteIcon,
-<<<<<<< HEAD
-=======
   Refresh as RefreshIcon,
->>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb
   NetworkCheck as NetworkIcon,
   DataUsage as DataIcon,
   Warning as WarningIcon
