@@ -1,35 +1,14 @@
 // Configuration for different environments
 const ENV = {
   development: {
-<<<<<<< HEAD
     API_URL: 'http://192.168.1.188:8000/api', // Your current computer IP
   },
   production: {
-    API_URL: 'https://water-utility-backend.onrender.com/api', // Render deployed backend
-  },
-  staging: {
-    API_URL: 'https://staging-water-utility.onrender.com/api',
+    API_URL: 'https://water-utility-backend.onrender.com/api', // Render backend
   },
   local: {
     API_URL: 'http://localhost:8000/api',
   }
-};
-
-// Get current environment from build time or localStorage
-const getCurrentEnvironment = () => {
-  // Check if user has saved a custom environment
-  const savedEnv = localStorage.getItem('app_environment');
-  if (savedEnv && ENV[savedEnv]) {
-    return savedEnv;
-  }
-  
-  // Use production for APK builds
-  if (process.env.NODE_ENV === 'production') {
-    return 'production';
-  }
-  
-  // Development default
-  return 'development';
 };
 
 // Get API URL based on current environment
@@ -41,6 +20,11 @@ const getApiUrl = () => {
   
   // Check if running on localhost
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    // Try to get saved custom URL first
+    const savedUrl = localStorage.getItem('custom_api_url');
+    if (savedUrl) {
+      return savedUrl;
+    }
     return ENV.local.API_URL;
   }
   
@@ -61,20 +45,44 @@ export const setApiUrl = (url) => {
   window.location.reload();
 };
 
-// Get custom API URL if set
+// Helper to get custom API URL
 export const getCustomApiUrl = () => {
   const customUrl = localStorage.getItem('custom_api_url');
   if (customUrl) return customUrl;
   return API_URL;
 };
-=======
-    API_URL: 'http://192.168.1.16:8000/api', // For local testing
-  },
-  production: {
-    API_URL: 'https://bulk-meter-mobile.onrender.com/api', // <-- YOUR LIVE RENDER URL
+
+// Helper to reset to default
+export const resetApiUrl = () => {
+  localStorage.removeItem('custom_api_url');
+  window.location.reload();
+};
+
+// Helper to test connection to a server
+export const testConnection = async (url) => {
+  try {
+    const response = await fetch(`${url}/health`, { timeout: 5000 });
+    return response.ok;
+  } catch (error) {
+    return false;
   }
 };
 
-// Use production for the APK build
-export const API_URL = ENV.production.API_URL;
->>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb
+// Helper to discover local server automatically
+export const discoverServer = async () => {
+  const commonIps = ['192.168.1.188', '192.168.1.100', '192.168.0.100', '10.0.0.100'];
+  
+  for (const ip of commonIps) {
+    try {
+      const url = `http://${ip}:8000/api`;
+      const isValid = await testConnection(url);
+      if (isValid) {
+        setApiUrl(url);
+        return url;
+      }
+    } catch (e) {
+      // Continue to next IP
+    }
+  }
+  return null;
+};
