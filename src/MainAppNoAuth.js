@@ -200,11 +200,7 @@ export default function MainApp() {
   const [dataUsageDialogOpen, setDataUsageDialogOpen] = useState(false);
  
   
-<<<<<<< HEAD
-  const { networkType, isMetered, connectionSpeed } = useNetworkStatus();
-=======
   const { networkType, isConnected, isMetered, connectionSpeed } = useNetworkStatus();
->>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb
   const { dataUsage, trackDataUsage, resetDataUsage } = useDataUsage();
 
   // Network status
