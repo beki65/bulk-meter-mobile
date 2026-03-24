@@ -1,14 +1,6 @@
 {
   "name": "bulk-meter-mobile",
   "version": "1.0.0",
-<<<<<<< HEAD
-  "homepage": "https://beki65.github.io/bulk-meter-mobile",
-=======
->>>>>>> 
-  "private": true,
-  "dependencies": {
-  "name": "bulk-meter-mobile",
-  "version": "1.0.0",
   "homepage": "https://beki65.github.io/bulk-meter-mobile",
   "private": true,
   "dependencies": {
@@ -36,9 +28,7 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build",
-    "build:render": "REACT_APP_API_URL=https://water-utility-backend.onrender.com/api npm run build",
-    "deploy:render": "REACT_APP_API_URL=https://water-utility-backend.onrender.com/api npm run deploy"
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
