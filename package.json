@@ -4,7 +4,12 @@
 <<<<<<< HEAD
   "homepage": "https://beki65.github.io/bulk-meter-mobile",
 =======
->>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb
+>>>>>>> 
+  "private": true,
+  "dependencies": {
+  "name": "bulk-meter-mobile",
+  "version": "1.0.0",
+  "homepage": "https://beki65.github.io/bulk-meter-mobile",
   "private": true,
   "dependencies": {
     "@capacitor/android": "^8.2.0",
@@ -29,15 +34,11 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-<<<<<<< HEAD
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "build:render": "REACT_APP_API_URL=https://water-utility-backend.onrender.com/api npm run build",
     "deploy:render": "REACT_APP_API_URL=https://water-utility-backend.onrender.com/api npm run deploy"
-=======
-    "eject": "react-scripts eject"
->>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb
   },
   "eslintConfig": {
     "extends": [
@@ -58,13 +59,7 @@
   },
   "proxy": "http://localhost:8000",
   "devDependencies": {
-<<<<<<< HEAD
     "@capacitor/cli": "^8.2.0",
     "gh-pages": "^5.0.0"
   }
 }
-=======
-    "@capacitor/cli": "^8.2.0"
-  }
-}
->>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb
