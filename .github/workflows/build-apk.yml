@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'  # Changed to Node.js 22
           
       - name: Install dependencies
         run: npm install
@@ -35,11 +35,15 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         
-      - name: Install Capacitor
+      - name: Setup Capacitor
         run: |
+          # Install Capacitor
           npm install @capacitor/cli @capacitor/android
+          # Initialize Capacitor
           npx cap init "Bulk Meter Mobile" "com.beki65.bulkmeter" --web-dir=build
+          # Add Android platform
           npx cap add android
+          # Copy files
           npx cap copy android
           
       - name: Build APK
