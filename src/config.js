@@ -1,6 +1,7 @@
 // Configuration for different environments
 const ENV = {
   development: {
+<<<<<<< HEAD
     API_URL: 'http://192.168.1.188:8000/api', // Your current computer IP
   },
   production: {
@@ -66,3 +67,14 @@ export const getCustomApiUrl = () => {
   if (customUrl) return customUrl;
   return API_URL;
 };
+=======
+    API_URL: 'http://192.168.1.16:8000/api', // For local testing
+  },
+  production: {
+    API_URL: 'https://bulk-meter-mobile.onrender.com/api', // <-- YOUR LIVE RENDER URL
+  }
+};
+
+// Use production for the APK build
+export const API_URL = ENV.production.API_URL;
+>>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb

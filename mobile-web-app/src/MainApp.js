@@ -41,16 +41,14 @@ import {
   Sync as SyncIcon,
   WifiOff as OfflineIcon,
   Delete as DeleteIcon,
-<<<<<<< HEAD
-=======
   Refresh as RefreshIcon,
->>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb
   NetworkCheck as NetworkIcon,
   DataUsage as DataIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
 import localforage from 'localforage';
 import axios from 'axios';
+import { useAuth } from './context/AuthContext';
 import { API_URL } from './config';
 // Configure localforage
 localforage.config({
@@ -201,13 +199,9 @@ export default function MainApp() {
   const [photo, setPhoto] = useState(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [dataUsageDialogOpen, setDataUsageDialogOpen] = useState(false);
- 
+  const { user, logout } = useAuth();
   
-<<<<<<< HEAD
-  const { networkType, isMetered, connectionSpeed } = useNetworkStatus();
-=======
   const { networkType, isConnected, isMetered, connectionSpeed } = useNetworkStatus();
->>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb
   const { dataUsage, trackDataUsage, resetDataUsage } = useDataUsage();
 
   // Network status
@@ -320,7 +314,8 @@ export default function MainApp() {
       date: new Date().toISOString().split('T')[0],
       synced: false,
       isOutlet: isOutlet,
-      
+      userId: user?._id,
+      userName: user?.name
     };
 
     console.log('💾 Saving reading:', readingData);
@@ -360,7 +355,8 @@ export default function MainApp() {
         timestamp: reading.timestamp,
         date: reading.date,
         pointType: reading.isOutlet ? 'outlet' : 'inlet',
-        
+        userId: reading.userId,
+        userName: reading.userName
       });
 
       // Track data usage (approximate size of request)
@@ -609,71 +605,77 @@ export default function MainApp() {
   );
 
   // Render history screen
-// Render history screen
-const renderHistoryScreen = () => (
-  <Box sx={{ p: 2 }}>
-    <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-      <Typography variant="h6">Saved Readings</Typography>
-      <Box>
-        <Button
-          size="small"
-          startIcon={<SyncIcon />}
-          onClick={syncWithServer}
-          disabled={syncing || offline}
-          sx={{ mr: 1 }}
-        >
-          {syncing ? <CircularProgress size={20} /> : 'Sync'}
-        </Button>
+  const renderHistoryScreen = () => (
+    <Box sx={{ p: 2 }}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h6">Saved Readings</Typography>
+        <Box>
+          <Button
+            size="small"
+            startIcon={<SyncIcon />}
+            onClick={syncWithServer}
+            disabled={syncing || offline}
+            sx={{ mr: 1 }}
+          >
+            {syncing ? <CircularProgress size={20} /> : 'Sync'}
+          </Button>
+          <Button
+            size="small"
+            color="error"
+            onClick={logout}
+          >
+            Logout
+          </Button>
+        </Box>
       </Box>
-    </Box>
 
-    {syncing && (
-      <Box sx={{ width: '100%', mb: 2 }}>
-        <LinearProgress />
-        <Typography variant="caption" align="center" display="block">
-          Syncing... Please wait
-        </Typography>
-      </Box>
-    )}
+      {syncing && (
+        <Box sx={{ width: '100%', mb: 2 }}>
+          <LinearProgress />
+          <Typography variant="caption" align="center" display="block">
+            Syncing... Please wait
+          </Typography>
+        </Box>
+      )}
 
-    {savedReadings.length === 0 ? (
-      <Alert severity="info">No readings saved</Alert>
-    ) : (
-      savedReadings.map((reading) => (
-        <Card key={reading.id} sx={{ mb: 2 }}>
-          <CardContent>
-            <Box display="flex" justifyContent="space-between">
-              <Box>
-                <Typography variant="subtitle2">
-                  {reading.dma} - {reading.inlet}
-                </Typography>
-                <Typography variant="body2">
-                  Reading: {reading.meterReading} m³
-                </Typography>
-                <Typography variant="caption" color="textSecondary">
-                  {new Date(reading.timestamp).toLocaleString()}
-                </Typography>
-                {reading.gps && (
-                  <Typography variant="caption" display="block" color="textSecondary">
-                    📍 {reading.gps.lat.toFixed(4)}, {reading.gps.lng.toFixed(4)}
+      {savedReadings.length === 0 ? (
+        <Alert severity="info">No readings saved</Alert>
+      ) : (
+        savedReadings.map((reading) => (
+          <Card key={reading.id} sx={{ mb: 2 }}>
+            <CardContent>
+              <Box display="flex" justifyContent="space-between">
+                <Box>
+                  <Typography variant="subtitle2">
+                    {reading.dma} - {reading.inlet}
                   </Typography>
-                )}
+                  <Typography variant="body2">
+                    Reading: {reading.meterReading} m³
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    {new Date(reading.timestamp).toLocaleString()}
+                  </Typography>
+                  {reading.gps && (
+                    <Typography variant="caption" display="block" color="textSecondary">
+                      📍 {reading.gps.lat.toFixed(4)}, {reading.gps.lng.toFixed(4)}
+                    </Typography>
+                  )}
+                </Box>
+                <Box display="flex" alignItems="center">
+                  {!reading.synced && (
+                    <Chip size="small" label="Pending" color="warning" sx={{ mr: 1 }} />
+                  )}
+                  <IconButton size="small" onClick={() => deleteReading(reading.id)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
               </Box>
-              <Box display="flex" alignItems="center">
-                {!reading.synced && (
-                  <Chip size="small" label="Pending" color="warning" sx={{ mr: 1 }} />
-                )}
-                <IconButton size="small" onClick={() => deleteReading(reading.id)}>
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
-      ))
-    )}
-  </Box>
-);
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </Box>
+  );
 
   return (
     <ThemeProvider theme={theme}>
@@ -682,7 +684,7 @@ const renderHistoryScreen = () => (
         <AppBar position="sticky">
           <Toolbar>
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
-               📱 Bulk Meter
+              📱 Bulk Meter {user && `- ${user.name}`}
             </Typography>
             {offline && <OfflineIcon />}
           </Toolbar>

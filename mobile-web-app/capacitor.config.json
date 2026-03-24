@@ -5,7 +5,6 @@
   "bundledWebRuntime": false,
   "server": {
     "url": "https://bulk-meter-mobile.onrender.com",
-<<<<<<< HEAD
     "cleartext": true,
     "androidScheme": "https",
     "allowNavigation": [
@@ -14,13 +13,6 @@
   },
   "android": {
     "allowMixedContent": true,
-=======
-    "cleartext": true
-  },
-  "android": {
-    "allowMixedContent": true,
-    "captureInput": true,
->>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb
     "webContentsDebuggingEnabled": true
   }
 }

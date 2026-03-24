@@ -50,6 +50,7 @@ import localforage from 'localforage';
 import axios from 'axios';
 import { useAuth } from './context/AuthContext';
 import { API_URL } from './config';
+<<<<<<< HEAD
 // Add import
 import SettingsIcon from '@mui/icons-material/Settings';
 import EnvironmentSwitcher from './components/EnvironmentSwitcher';
@@ -69,6 +70,8 @@ const [showEnvSwitcher, setShowEnvSwitcher] = useState(false);
     onClose={() => setShowEnvSwitcher(false)} 
   />
 )}
+=======
+>>>>>>> b7cd2bc2a082bb0d8ea2e81b00a2c10d5dae25eb
 // Configure localforage
 localforage.config({
   name: 'BulkMeterMobile',
