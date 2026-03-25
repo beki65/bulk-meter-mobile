@@ -4,9 +4,9 @@
   "homepage": "https://beki65.github.io/bulk-meter-mobile",
   "private": true,
   "dependencies": {
-    "@capacitor/android": "^8.2.0",
+    "@capacitor/android": "^6.2.1",
     "@capacitor/camera": "^8.0.1",
-    "@capacitor/core": "^8.2.0",
+    "@capacitor/core": "^6.2.1",
     "@capacitor/geolocation": "^8.1.0",
     "@capacitor/network": "^8.0.1",
     "@emotion/react": "^11.11.1",
