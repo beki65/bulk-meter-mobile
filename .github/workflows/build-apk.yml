@@ -13,10 +13,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Setup Node.js
+      - name: Setup Node.js (v22 for Capacitor 8)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           
       - name: Install dependencies
         run: npm install
@@ -33,7 +33,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         
-      - name: Setup Capacitor (v6 - compatible with Node 20)
+      - name: Setup Capacitor
         run: |
           # Remove any existing capacitor config files
           rm -f capacitor.config.ts capacitor.config
@@ -51,8 +51,8 @@ jobs:
           }
           EOF
           
-          # Install Capacitor v6 (compatible with Node 20)
-          npm install @capacitor/cli@6 @capacitor/android@6
+          # Install Capacitor Android (matching the version in package.json)
+          npm install @capacitor/android@8 --legacy-peer-deps
           
           # Add Android platform
           npx cap add android
