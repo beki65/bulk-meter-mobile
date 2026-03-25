@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "homepage": "https://beki65.github.io/bulk-meter-mobile",
   "private": true,
+{
   "dependencies": {
-    "@capacitor/android": "^6.2.1",
-    "@capacitor/camera": "^6.2.0",
-    "@capacitor/core": "^6.2.1",
-    "@capacitor/geolocation": "^6.2.0",
-    "@capacitor/network": "^6.2.0",
+    "@capacitor/android": "6.2.0",
+    "@capacitor/camera": "6.2.0",
+    "@capacitor/core": "6.2.0",
+    "@capacitor/geolocation": "6.2.0",
+    "@capacitor/network": "6.2.0",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.14.19",
@@ -22,34 +23,8 @@
     "react-router-dom": "^6.20.1",
     "react-scripts": "5.0.1"
   },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  },
-  "proxy": "http://localhost:8000",
   "devDependencies": {
-    "@capacitor/cli": "^6.2.1",
+    "@capacitor/cli": "6.2.0",
     "gh-pages": "^5.0.0"
   }
 }
