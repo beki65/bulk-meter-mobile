@@ -13,14 +13,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Setup Node.js (v22 for Capacitor 8)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           
       - name: Install dependencies
-        run: npm install
-        
+        run: npm install --legacy-peer-deps
+        env:
+          CI: false
+          
       - name: Build React App
         run: CI=false npm run build
         
@@ -51,11 +53,8 @@ jobs:
           }
           EOF
           
-          # Install Capacitor Android (matching the version in package.json)
-          npm install @capacitor/android@8 --legacy-peer-deps
-          
-          # Add Android platform
-          npx cap add android
+          # Add Android platform (if not exists)
+          npx cap add android || true
           
           # Copy files
           npx cap copy android
