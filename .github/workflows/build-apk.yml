@@ -16,16 +16,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'  # Changed to Node.js 22
+          node-version: '20'
           
       - name: Install dependencies
         run: npm install
         
       - name: Build React App
-        run: npm run build
-        env:
-          CI: false
-          
+        run: CI=false npm run build
+        
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -37,12 +35,28 @@ jobs:
         
       - name: Setup Capacitor
         run: |
+          # Remove any existing capacitor config files
+          rm -f capacitor.config.ts capacitor.config
+          
+          # Create clean config
+          cat > capacitor.config.json << 'EOF'
+          {
+            "appId": "com.beki65.bulkmeter",
+            "appName": "Bulk Meter Mobile",
+            "webDir": "build",
+            "bundledWebRuntime": false,
+            "server": {
+              "androidScheme": "https"
+            }
+          }
+          EOF
+          
           # Install Capacitor
           npm install @capacitor/cli @capacitor/android
-          # Initialize Capacitor
-          npx cap init "Bulk Meter Mobile" "com.beki65.bulkmeter" --web-dir=build
+          
           # Add Android platform
           npx cap add android
+          
           # Copy files
           npx cap copy android
           
@@ -58,4 +72,3 @@ jobs:
           name: app-release
           path: android/app/build/outputs/apk/release/
           if-no-files-found: error
-          retention-days: 30
