@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Debug APK
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -26,48 +26,44 @@ jobs:
       - name: Build React App
         run: CI=false npm run build
         
-      - name: Setup Java 21
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
           
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         
       - name: Setup Capacitor
         run: |
-          # Remove any existing capacitor config files
-          rm -f capacitor.config.ts capacitor.config
-          
-          # Create clean config
+          # Create capacitor config
           cat > capacitor.config.json << 'EOF'
           {
             "appId": "com.beki65.bulkmeter",
             "appName": "Bulk Meter Mobile",
             "webDir": "build",
-            "bundledWebRuntime": false,
-            "server": {
-              "androidScheme": "https"
-            }
+            "bundledWebRuntime": false
           }
           EOF
           
-          # Add Android platform (if not exists)
-          npx cap add android || true
+          # Install Capacitor
+          npm install @capacitor/cli @capacitor/android
+          
+          # Add Android platform
+          npx cap add android
           
           # Copy files
           npx cap copy android
           
-      - name: Build APK
+      - name: Build Debug APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleDebug
           
-      - name: Upload APK
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: android/app/build/outputs/apk/release/
-          if-no-files-found: error
+          name: Bulk-Meter-App
+          path: android/app/build/outputs/apk/debug/app-debug.apk
