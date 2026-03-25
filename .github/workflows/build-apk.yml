@@ -33,7 +33,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         
-      - name: Setup Capacitor
+      - name: Setup Capacitor (v6 - compatible with Node 20)
         run: |
           # Remove any existing capacitor config files
           rm -f capacitor.config.ts capacitor.config
@@ -51,8 +51,8 @@ jobs:
           }
           EOF
           
-          # Install Capacitor
-          npm install @capacitor/cli @capacitor/android
+          # Install Capacitor v6 (compatible with Node 20)
+          npm install @capacitor/cli@6 @capacitor/android@6
           
           # Add Android platform
           npx cap add android
