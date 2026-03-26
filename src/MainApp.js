@@ -41,7 +41,6 @@ import {
   Sync as SyncIcon,
   WifiOff as OfflineIcon,
   Delete as DeleteIcon,
-  Refresh as RefreshIcon,
   NetworkCheck as NetworkIcon,
   DataUsage as DataIcon,
   Warning as WarningIcon,
@@ -247,7 +246,7 @@ export default function MainApp() {
     setSnackbar({ open: true, message, severity });
   };
 
-  // GPS Capture using browser's geolocation
+  // GPS Capture
   const captureGps = () => {
     setGps(prev => ({ ...prev, loading: true }));
 
@@ -275,7 +274,7 @@ export default function MainApp() {
     );
   };
 
-  // Camera using browser's file input
+  // Camera
   const takePhoto = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -345,13 +344,6 @@ export default function MainApp() {
       if (reading.dma === 'Jafar') dmaId = 'DMA-JFR';
       if (reading.dma === 'Yeka') dmaId = 'DMA-YKA';
 
-      console.log('📡 Syncing to:', `${API_URL}/bulk-readings`);
-      console.log('📦 Data:', {
-        dmaId,
-        pointName: reading.inlet,
-        meterReading: parseFloat(reading.meterReading)
-      });
-
       const response = await axios.post(`${API_URL}/bulk-readings`, {
         dmaId: dmaId,
         pointName: reading.inlet,
@@ -378,16 +370,11 @@ export default function MainApp() {
       return false;
     } catch (error) {
       console.error('❌ Sync failed:', error.message);
-      console.error('📡 URL:', `${API_URL}/bulk-readings`);
-      if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error('Response data:', error.response.data);
-      }
       throw error;
     }
   };
 
-  // Main sync function with network awareness
+  // Main sync function
   const syncWithServer = async () => {
     if (offline) {
       showSnackbar('Cannot sync while offline', 'warning');
@@ -408,7 +395,7 @@ export default function MainApp() {
     await performSync(unsynced);
   };
 
-  // Perform the actual sync
+  // Perform sync
   const performSync = async (unsynced) => {
     setSyncing(true);
     let successCount = 0;
@@ -452,7 +439,7 @@ export default function MainApp() {
     showSnackbar('Reading deleted');
   };
 
-  // Format bytes for display
+  // Format bytes
   const formatBytes = (bytes) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
