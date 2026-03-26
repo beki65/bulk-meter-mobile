@@ -10,62 +10,32 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
+      - uses: actions/checkout@v4
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '16'
           
       - name: Install dependencies
-        run: npm install
+        run: npm ci
         env:
           CI: false
           
-      - name: Build React App
+      - name: Build
         run: npm run build
         env:
           CI: false
           
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: 'zulu'
+          java-version: '11'
           
-      - name: Install Capacitor
-        run: |
-          # Install Capacitor core and CLI
-          npm install @capacitor/core
-          npm install -D @capacitor/cli
-          
-          # Install Android platform
-          npm install @capacitor/android
-          
-      - name: Initialize Capacitor
-        run: |
-          # Initialize Capacitor with config
-          npx cap init "Bulk Meter" "com.beki65.bulkmeter" --web-dir=build
-          
-      - name: Add Android platform
-        run: |
-          # Add Android platform (must be after init)
-          npx cap add android
-          
-      - name: Copy web assets
-        run: |
-          # Copy built files to Android project
-          npx cap copy android
-          
-      - name: Build APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug
-          
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Setup Capacitor
+        uses: capacitor-actions/build@v1
         with:
-          name: Bulk-Meter-App
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          app-id: com.beki65.bulkmeter
+          app-name: Bulk Meter
+          web-dir: build
