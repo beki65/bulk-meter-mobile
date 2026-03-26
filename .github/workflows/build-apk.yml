@@ -13,10 +13,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -39,8 +39,8 @@ jobs:
         
       - name: Setup Capacitor
         run: |
-          # Install Capacitor
-          npm install @capacitor/cli @capacitor/android --legacy-peer-deps
+          # Install Capacitor (older version compatible with Node 20)
+          npm install @capacitor/cli@6 @capacitor/android@6 --legacy-peer-deps
           
           # Create capacitor config
           cat > capacitor.config.json << 'EOF'
