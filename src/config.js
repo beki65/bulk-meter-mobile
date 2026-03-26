@@ -1,14 +1,9 @@
 // Configuration for different environments
-let API_URL = 'https://water-utility-backend.onrender.com/api';
+let API_URL = 'https://bulk-meter-mobile.onrender.com/api';
 
 // For development (local testing)
 if (process.env.NODE_ENV === 'development') {
   API_URL = 'http://localhost:8000/api';
-}
-
-// For Android app, use production URL
-if (typeof window !== 'undefined' && window.location.protocol === 'capacitor:') {
-  API_URL = 'https://water-utility-backend.onrender.com/api';
 }
 
 export { API_URL };
@@ -28,6 +23,7 @@ export const testConnection = async (url) => {
     const data = await response.json();
     return response.ok;
   } catch (error) {
+    console.error('Connection failed:', error);
     return false;
   }
 };
