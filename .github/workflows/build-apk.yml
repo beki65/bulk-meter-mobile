@@ -7,16 +7,16 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest  # macOS often has better Android SDK support
+    runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -28,26 +28,54 @@ jobs:
         env:
           CI: false
           
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
           
-      - name: Setup Capacitor
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        
+      - name: Setup Capacitor 5
         run: |
-          npm install @capacitor/cli @capacitor/android
-          npx cap init "Bulk Meter" "com.beki65.bulkmeter" --web-dir=build
+          # Clean up old configs
+          rm -f capacitor.config.json
+          
+          # Create capacitor config
+          cat > capacitor.config.json << 'EOF'
+          {
+            "appId": "com.beki65.bulkmeter",
+            "appName": "Bulk Meter Test",
+            "webDir": "build",
+            "bundledWebRuntime": false
+          }
+          EOF
+          
+          # Install Capacitor 5 (compatible with Node 20)
+          npm install @capacitor/cli@5 @capacitor/android@5 --legacy-peer-deps
+          
+          # Add Android platform
           npx cap add android
+          
+          # Copy files
           npx cap copy android
+          
+      - name: Fix Gradle Version
+        run: |
+          cd android
+          # Use older gradle that works with Java 17
+          sed -i 's/gradle-8.0.2-all.zip/gradle-7.6.4-all.zip/g' gradle/wrapper/gradle-wrapper.properties
+          cat gradle/wrapper/gradle-wrapper.properties
           
       - name: Build APK
         run: |
           cd android
+          chmod +x gradlew
           ./gradlew assembleDebug
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Bulk-Meter-App
+          name: Bulk-Meter-Test
           path: android/app/build/outputs/apk/debug/app-debug.apk
