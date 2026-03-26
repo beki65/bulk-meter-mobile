@@ -34,12 +34,28 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
           
-      - name: Setup Capacitor
+      - name: Install Capacitor
         run: |
-          npm install -g @capacitor/cli
+          # Install Capacitor core and CLI
           npm install @capacitor/core
+          npm install -D @capacitor/cli
+          
+          # Install Android platform
+          npm install @capacitor/android
+          
+      - name: Initialize Capacitor
+        run: |
+          # Initialize Capacitor with config
           npx cap init "Bulk Meter" "com.beki65.bulkmeter" --web-dir=build
+          
+      - name: Add Android platform
+        run: |
+          # Add Android platform (must be after init)
           npx cap add android
+          
+      - name: Copy web assets
+        run: |
+          # Copy built files to Android project
           npx cap copy android
           
       - name: Build APK
