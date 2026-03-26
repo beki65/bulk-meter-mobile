@@ -13,7 +13,11 @@ const ENV = {
 
 // Detect if running in Capacitor/Android app
 const isCapacitorApp = () => {
-  return typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform();
+  // Check if window.Capacitor exists (safe check)
+  return typeof window !== 'undefined' && 
+         window.Capacitor && 
+         window.Capacitor.isNativePlatform && 
+         window.Capacitor.isNativePlatform();
 };
 
 // Get API URL based on current environment
@@ -25,20 +29,30 @@ const getApiUrl = () => {
   }
   
   // Check if running on GitHub Pages
-  if (window.location.hostname.includes('github.io')) {
+  if (typeof window !== 'undefined' && window.location && window.location.hostname.includes('github.io')) {
     console.log('🌐 Running on GitHub Pages, using production URL');
     return ENV.production.API_URL;
   }
   
   // Check if running on localhost
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    const savedUrl = localStorage.getItem('custom_api_url');
-    if (savedUrl) {
-      console.log('💾 Using saved custom URL:', savedUrl);
-      return savedUrl;
+  if (typeof window !== 'undefined' && window.location && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    // Try to get saved custom URL first
+    if (typeof localStorage !== 'undefined') {
+      const savedUrl = localStorage.getItem('custom_api_url');
+      if (savedUrl) {
+        console.log('💾 Using saved custom URL:', savedUrl);
+        return savedUrl;
+      }
     }
     console.log('🏠 Using local URL');
     return ENV.local.API_URL;
+  }
+  
+  // For development with IP
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🛠️ Using development URL');
+    return ENV.development.API_URL;
   }
   
   // Default to production
@@ -51,23 +65,33 @@ console.log('🔧 Final API_URL:', API_URL);
 
 // Helper to manually set API URL
 export const setApiUrl = (url) => {
-  localStorage.setItem('custom_api_url', url);
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('custom_api_url', url);
+  }
   console.log('📡 API URL changed to:', url);
-  window.location.reload();
+  if (typeof window !== 'undefined') {
+    window.location.reload();
+  }
 };
 
 // Helper to get custom API URL
 export const getCustomApiUrl = () => {
-  const customUrl = localStorage.getItem('custom_api_url');
-  if (customUrl) return customUrl;
+  if (typeof localStorage !== 'undefined') {
+    const customUrl = localStorage.getItem('custom_api_url');
+    if (customUrl) return customUrl;
+  }
   return API_URL;
 };
 
 // Helper to reset to default
 export const resetApiUrl = () => {
-  localStorage.removeItem('custom_api_url');
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('custom_api_url');
+  }
   console.log('🔄 Reset to default API URL');
-  window.location.reload();
+  if (typeof window !== 'undefined') {
+    window.location.reload();
+  }
 };
 
 // Helper to test connection to a server
