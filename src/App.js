@@ -1,6 +1,7 @@
 import React from 'react';
-import MainAppNoAuth from './MainAppNoAuth';
+import TestApp from './TestApp';
 
 export default function App() {
-  return <MainAppNoAuth />;
+  console.log('🚀 App starting...');
+  return <TestApp />;
 }

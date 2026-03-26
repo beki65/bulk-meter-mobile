@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '18'
           
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -24,24 +24,29 @@ jobs:
           CI: false
           
       - name: Build React App
-        run: CI=false npm run build
-        
-      - name: Setup Java 21
+        run: npm run build
+        env:
+          CI: false
+          
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
           
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         
       - name: Setup Capacitor
         run: |
+          # Install Capacitor
+          npm install @capacitor/cli @capacitor/android --legacy-peer-deps
+          
           # Create capacitor config
           cat > capacitor.config.json << 'EOF'
           {
             "appId": "com.beki65.bulkmeter",
-            "appName": "Bulk Meter Mobile",
+            "appName": "Bulk Meter Test",
             "webDir": "build",
             "bundledWebRuntime": false
           }
@@ -62,6 +67,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Bulk-Meter-App
+          name: Bulk-Meter-Test
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
