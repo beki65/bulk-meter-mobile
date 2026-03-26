@@ -19,11 +19,16 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
-  "devDependencies": {
-    "@capacitor/cli": "^5.7.0",
-    "@capacitor/android": "^5.7.0",
-    "@capacitor/camera": "^5.0.6",
-    "@capacitor/geolocation": "^5.0.6",
-    "@capacitor/network": "^5.0.6"
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }
