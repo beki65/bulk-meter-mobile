@@ -1,26 +1,28 @@
 import React from 'react';
 
-export default function App() {
-  console.log('🚀 App starting...');
+function App() {
   return (
     <div style={{
       display: 'flex',
-      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: '100vh',
       backgroundColor: '#1e3a8a',
       color: 'white',
       fontFamily: 'sans-serif',
-      padding: '20px',
-      textAlign: 'center'
+      textAlign: 'center',
+      padding: '20px'
     }}>
-      <h1 style={{ fontSize: '48px', marginBottom: '20px' }}>💧</h1>
-      <h2>✅ APP IS WORKING!</h2>
-      <p>If you see this, the app loads correctly.</p>
-      <p style={{ fontSize: '12px', marginTop: '40px', color: '#ccc' }}>
-        Build: {new Date().toLocaleString()}
-      </p>
+      <div>
+        <h1 style={{ fontSize: '48px', marginBottom: '20px' }}>💧</h1>
+        <h2>Bulk Meter Mobile</h2>
+        <p>App is working!</p>
+        <p style={{ fontSize: '12px', marginTop: '20px', color: '#ccc' }}>
+          Build: {new Date().toLocaleString()}
+        </p>
+      </div>
     </div>
   );
 }
+
+export default App;
