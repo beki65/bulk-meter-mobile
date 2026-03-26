@@ -43,11 +43,7 @@ jobs:
             "appId": "com.beki65.bulkmeter",
             "appName": "Bulk Meter Mobile",
             "webDir": "build",
-            "bundledWebRuntime": false,
-            "server": {
-              "url": "https://beki65.github.io/bulk-meter-mobile",
-              "androidScheme": "https"
-            }
+            "bundledWebRuntime": false
           }
           EOF
           
