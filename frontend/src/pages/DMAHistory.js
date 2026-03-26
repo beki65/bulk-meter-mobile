@@ -15,7 +15,8 @@ import {
   WaterDrop as NRWIcon,
   People as CustomersIcon,
   Info as AboutIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  Analytics as AnalyticsIcon
 } from '@mui/icons-material';
 import DMAMap from '../components/DMAMap';
 import DMAInlets from '../components/DMAInlets';
@@ -26,6 +27,7 @@ import MonthlyConsumption from '../components/MonthlyConsumption';
 import NRWCalculator from '../components/NRWCalculator';
 import CustomerHistory from '../components/CustomerHistory';
 import About from '../components/About';
+import DMAConsumptionAnalytics from '../components/DMAConsumptionAnalytics';
 
 // Default DMAs (used as fallback)
 const DEFAULT_DMAS = [
@@ -67,7 +69,8 @@ const DEFAULT_DMAS = [
     name: '2019 DMA',
     inlets: [
       { name: 'Inlet 1', flowRate: null, status: 'unknown', lastReading: null },
-      { name: 'Inlet 2', flowRate: null, status: 'unknown', lastReading: null }
+      { name: 'Inlet 2', flowRate: null, status: 'unknown', lastReading: null },
+      { name: 'Inlet 3', flowRate: null, status: 'unknown', lastReading: null}
     ],
     outlets: [],
     totalConnections: null,
@@ -80,7 +83,7 @@ const DEFAULT_DMAS = [
   }
 ];
 
-const API_URL = 'http://192.168.1.16:8000/api';
+const API_URL = 'http://192.168.1.115:8000/api';
 
 export default function DMAHistory() {
   const [viewMode, setViewMode] = useState('cards');
@@ -100,93 +103,85 @@ export default function DMAHistory() {
   const [customerHistoryOpen, setCustomerHistoryOpen] = useState(false);
   const [nrwOpen, setNrwOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
 
   // Fetch live data from backend
   useEffect(() => {
     fetchDMAData();
-    // Refresh every 30 seconds
     const interval = setInterval(fetchDMAData, 30000);
     return () => clearInterval(interval);
   }, []);
 
- const fetchDMAData = async () => {
-  setLoading(true);
-  try {
-    // Fetch DMA history from backend
-    const response = await axios.get(`${API_URL}/dma/history`);
-    console.log('📊 DMA History Response:', response.data);
-    
-    // Fetch ALL readings
-    const readingsResponse = await axios.get(`${API_URL}/bulk-readings`);
-    console.log('📊 All Readings Response:', readingsResponse.data);
-    
-    // Create a map of latest readings
-    const latestReadings = {};
-    readingsResponse.data.forEach(reading => {
-      const key = `${reading.dmaId}-${reading.pointName}`;
-      console.log(`Processing reading: ${key} = ${reading.meterReading} at ${reading.timestamp}`);
+  // Add debug log
+  console.log('🔄 Component State:', {
+    viewMode,
+    dmaZonesCount: dmaData.zones?.length,
+    selectedDMA: selectedDMA?.name,
+    detailsOpen,
+    analyticsOpen
+  });
+
+  const fetchDMAData = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.get(`${API_URL}/dma/history`);
+      console.log('📊 DMA History Response:', response.data);
       
-      if (!latestReadings[key] || new Date(reading.timestamp) > new Date(latestReadings[key].timestamp)) {
-        latestReadings[key] = {
-          value: reading.meterReading,
-          timestamp: reading.timestamp,
-          type: reading.pointType || 'inlet'
-        };
-      }
-    });
-    
-    console.log('📊 Latest Readings Map:', latestReadings);
-    
-    // Check specific keys we care about
-    console.log('Bulk Didly reading:', latestReadings['DMA-JFR-Bulk Didly']);
-    console.log('Tel reading:', latestReadings['DMA-JFR-Tel']);
-    
-    if (response.data && response.data.zones) {
-      const updatedZones = DEFAULT_DMAS.map(defaultZone => {
-        console.log(`Processing zone: ${defaultZone.name}`);
-        
-        const updatedInlets = defaultZone.inlets.map(inlet => {
-          const key = `${defaultZone.id}-${inlet.name}`;
-          const reading = latestReadings[key];
-          console.log(`Inlet ${inlet.name} key: ${key}, reading:`, reading);
-          
-          return {
-            ...inlet,
-            lastReading: reading || null,
-            status: reading ? 'active' : 'pending'
+      const readingsResponse = await axios.get(`${API_URL}/bulk-readings`);
+      console.log('📊 All Readings Response:', readingsResponse.data);
+      
+      const latestReadings = {};
+      readingsResponse.data.forEach(reading => {
+        const key = `${reading.dmaId}-${reading.pointName}`;
+        if (!latestReadings[key] || new Date(reading.timestamp) > new Date(latestReadings[key].timestamp)) {
+          latestReadings[key] = {
+            value: reading.meterReading,
+            timestamp: reading.timestamp,
+            type: reading.pointType || 'inlet'
           };
-        });
-
-        const updatedOutlets = defaultZone.outlets.map(outlet => {
-          const key = `${defaultZone.id}-${outlet.name}`;
-          const reading = latestReadings[key];
-          console.log(`Outlet ${outlet.name} key: ${key}, reading:`, reading);
-          
-          return {
-            ...outlet,
-            lastReading: reading || null,
-            status: reading ? 'active' : 'pending'
-          };
-        });
-
-        return {
-          ...defaultZone,
-          inlets: updatedInlets,
-          outlets: updatedOutlets
-        };
+        }
       });
+      
+      if (response.data && response.data.zones) {
+        const updatedZones = DEFAULT_DMAS.map(defaultZone => {
+          const updatedInlets = defaultZone.inlets.map(inlet => {
+            const key = `${defaultZone.id}-${inlet.name}`;
+            const reading = latestReadings[key];
+            return {
+              ...inlet,
+              lastReading: reading || null,
+              status: reading ? 'active' : 'pending'
+            };
+          });
 
-      console.log('📊 Final Updated Zones:', updatedZones);
-      setDmaData({ zones: updatedZones });
-      setError(null);
+          const updatedOutlets = defaultZone.outlets.map(outlet => {
+            const key = `${defaultZone.id}-${outlet.name}`;
+            const reading = latestReadings[key];
+            return {
+              ...outlet,
+              lastReading: reading || null,
+              status: reading ? 'active' : 'pending'
+            };
+          });
+
+          return {
+            ...defaultZone,
+            inlets: updatedInlets,
+            outlets: updatedOutlets
+          };
+        });
+
+        setDmaData({ zones: updatedZones });
+        setError(null);
+      }
+    } catch (err) {
+      console.error('❌ Failed to fetch DMA data:', err);
+      setError('Using offline data - Server connection failed');
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error('❌ Failed to fetch DMA data:', err);
-    setError('Using offline data - Server connection failed');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleAddNote = () => {
     if (newNote.trim() && selectedDMA) {
@@ -208,7 +203,6 @@ export default function DMAHistory() {
     }
   };
 
-  // Chart handlers
   const handleShowChart = (pointName, pointType) => {
     setChartPoint({ name: pointName, type: pointType });
     setChartOpen(true);
@@ -219,7 +213,6 @@ export default function DMAHistory() {
     setMonthlyOpen(true);
   };
 
-  // Customer History handler
   const handleViewCustomer = (customerId) => {
     setSelectedCustomerId(customerId);
     setCustomerHistoryOpen(true);
@@ -229,165 +222,119 @@ export default function DMAHistory() {
     return notes[zoneId] || [];
   };
 
-  const formatLastReading = (lastReading) => {
-    if (!lastReading) return null;
-    const date = new Date(lastReading.timestamp);
-    return `${lastReading.value} m³ at ${date.toLocaleTimeString()}`;
-  };
-
   const renderCards = () => (
     <Grid container spacing={3}>
-      {dmaData.zones.map((zone) => (
-        <Grid item xs={12} md={6} lg={4} key={zone.id}>
-          <Card sx={{ 
-            cursor: 'pointer',
-            transition: 'transform 0.2s',
-            '&:hover': { transform: 'scale(1.02)', boxShadow: 6 },
-            borderLeft: 6,
-            borderColor: zone.color,
-            position: 'relative'
-          }}>
-            {loading && (
-              <Box sx={{ position: 'absolute', top: 10, right: 10 }}>
-                <CircularProgress size={20} />
-              </Box>
-            )}
-            <CardContent>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h5" sx={{ fontWeight: 600 }}>
-                  {zone.name}
-                </Typography>
-                <Chip 
-                  label={zone.id} 
-                  size="small" 
-                  sx={{
-                    bgcolor: zone.color,
-                    color: 'white',
-                    fontWeight: 600
-                  }}
-                />
-              </Box>
-              
-              <Divider sx={{ my: 2 }} />
-              
-              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
-                Inlets/Outlets
-              </Typography>
-              
-              <Grid container spacing={3}>
-                {/* Inlets Section */}
-                <Grid item xs={6}>
-                  <Paper 
-                    elevation={0} 
-                    sx={{ 
-                      p: 2, 
-                      bgcolor: '#e3f2fd',
-                      borderRadius: 2,
-                    }}
-                  >
-                    <Box display="flex" alignItems="center" mb={1}>
-                      <InletIcon sx={{ fontSize: 20, color: '#1976d2', mr: 1 }} />
-                      <Typography variant="h6" sx={{ color: '#1976d2' }}>
-                        Inlets ({zone.inlets?.length || 0})
-                      </Typography>
-                    </Box>
-                    
-                    <Box sx={{ maxHeight: 150, overflow: 'auto' }}>
-                      {zone.inlets?.map((inlet, idx) => (
-                        <Box key={idx} sx={{ mb: 1.5, p: 1, bgcolor: 'white', borderRadius: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {inlet.name}
-                          </Typography>
-                          {inlet.lastReading ? (
-                            <Typography variant="caption" color="success.main" display="block">
-                              Last: {inlet.lastReading.value} m³
-                            </Typography>
-                          ) : (
-                            <Typography variant="caption" color="textSecondary">
-                              No data
-                            </Typography>
-                          )}
-                        </Box>
-                      ))}
-                    </Box>
-                  </Paper>
-                </Grid>
+      {dmaData.zones.map((zone) => {
+        console.log(`🎴 Rendering card for ${zone.name}`);
+        return (
+          <Grid item xs={12} md={6} lg={4} key={zone.id}>
+            <Card sx={{ 
+              borderLeft: 6, 
+              borderColor: zone.color,
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 450,
+              boxShadow: 3
+            }}>
+              <CardContent sx={{ flexGrow: 1 }}>
+                <Typography variant="h5" gutterBottom>{zone.name}</Typography>
+                <Chip label={zone.id} size="small" sx={{ bgcolor: zone.color, color: 'white', mb: 2 }} />
                 
-                {/* Outlets Section */}
-                <Grid item xs={6}>
-                  <Paper 
-                    elevation={0} 
-                    sx={{ 
-                      p: 2, 
-                      bgcolor: '#fff3e0',
-                      borderRadius: 2,
-                    }}
-                  >
-                    <Box display="flex" alignItems="center" mb={1}>
-                      <OutletIcon sx={{ fontSize: 20, color: '#f57c00', mr: 1 }} />
-                      <Typography variant="h6" sx={{ color: '#f57c00' }}>
-                        Outlets ({zone.outlets?.length || 0})
-                      </Typography>
-                    </Box>
-                    
-                    <Box sx={{ maxHeight: 150, overflow: 'auto' }}>
-                      {zone.outlets?.map((outlet, idx) => (
-                        <Box key={idx} sx={{ mb: 1.5, p: 1, bgcolor: 'white', borderRadius: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {outlet.name}
-                          </Typography>
-                          {outlet.lastReading ? (
-                            <Typography variant="caption" color="success.main" display="block">
-                              Last: {outlet.lastReading.value} m³
-                            </Typography>
-                          ) : (
-                            <Typography variant="caption" color="textSecondary">
-                              No data
-                            </Typography>
-                          )}
-                        </Box>
-                      ))}
-                    </Box>
-                  </Paper>
-                </Grid>
-              </Grid>
-
-              {zone.notes && (
-                <Alert severity="info" sx={{ mt: 2 }}>
-                  {zone.notes}
-                </Alert>
-              )}
-
-              <Box display="flex" justifyContent="center" mt={3}>
+                <Typography variant="subtitle2" sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Inlets ({zone.inlets.length})
+                </Typography>
+                {zone.inlets.map((inlet, i) => (
+                  <Box key={i} sx={{ ml: 2, mb: 1, p: 1, bgcolor: '#f8f9fa', borderRadius: 1 }}>
+                    <Typography variant="body2">{inlet.name}</Typography>
+                    <Typography variant="caption" color={inlet.lastReading ? 'success.main' : 'textSecondary'}>
+                      {inlet.lastReading ? `Last: ${inlet.lastReading.value} m³` : 'No readings yet'}
+                    </Typography>
+                  </Box>
+                ))}
+                
+                <Typography variant="subtitle2" sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Outlets ({zone.outlets.length})
+                </Typography>
+                {zone.outlets.length > 0 ? zone.outlets.map((outlet, i) => (
+                  <Box key={i} sx={{ ml: 2, mb: 1, p: 1, bgcolor: '#f8f9fa', borderRadius: 1 }}>
+                    <Typography variant="body2">{outlet.name}</Typography>
+                    <Typography variant="caption" color={outlet.lastReading ? 'success.main' : 'textSecondary'}>
+                      {outlet.lastReading ? `Last: ${outlet.lastReading.value} m³` : 'No readings yet'}
+                    </Typography>
+                  </Box>
+                )) : (
+                  <Typography variant="caption" sx={{ ml: 2, color: 'textSecondary' }}>
+                    No outlets configured
+                  </Typography>
+                )}
+              </CardContent>
+              
+              {/* BUTTON SECTION */}
+              <Box sx={{ 
+                p: 2, 
+                backgroundColor: '#FFD700',
+                borderTop: '4px solid #FF0000',
+                display: 'flex', 
+                gap: 1,
+                boxShadow: '0 -4px 10px rgba(0,0,0,0.1)'
+              }}>
                 <Button 
+                  fullWidth
                   variant="contained"
-                  startIcon={<InfoIcon />}
+                  size="large"
                   onClick={() => {
+                    console.log('🔵 DETAILS CLICKED:', zone.name);
                     setSelectedDMA(zone);
                     setDetailsOpen(true);
                   }}
                   sx={{ 
-                    borderRadius: 2,
-                    px: 4,
                     bgcolor: zone.color,
+                    color: 'white',
+                    py: 1.5,
+                    fontSize: '1rem',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  DETAILS
+                </Button>
+                <Button 
+                  fullWidth
+                  variant="contained"
+                  size="large"
+                  onClick={() => {
+                    console.log('📊 ANALYTICS CLICKED:', zone.name);
+                    setSelectedDMA(zone);
+                    setAnalyticsOpen(true);
+                  }}
+                  sx={{ 
+                    bgcolor: '#4CAF50',
+                    color: 'white',
+                    py: 1.5,
+                    fontSize: '1rem',
+                    fontWeight: 'bold',
                     '&:hover': {
-                      bgcolor: zone.color,
-                      filter: 'brightness(0.9)'
+                      bgcolor: '#45a049'
                     }
                   }}
                 >
-                  VIEW DETAILS
+                  ANALYTICS
                 </Button>
               </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      ))}
+            </Card>
+          </Grid>
+        );
+      })}
     </Grid>
   );
 
   return (
-    <Box>
+    <Box sx={{ 
+      minHeight: "100vh",
+      overflow: 'auto',
+      bgcolor: '#f5f5f5',
+      p: 3
+    }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Typography variant="h3" sx={{ fontWeight: 700, color: '#1e3a8a' }}>
           Water Utility Dashboard
@@ -407,7 +354,6 @@ export default function DMAHistory() {
         </Alert>
       )}
 
-      {/* View Tabs - Updated with new tabs */}
       <Paper sx={{ p: 1, mb: 4 }}>
         <Tabs 
           value={viewMode} 
@@ -427,13 +373,10 @@ export default function DMAHistory() {
         </Tabs>
       </Paper>
 
-      {/* Main Content */}
       {viewMode === 'cards' && renderCards()}
       {viewMode === 'map' && <DMAMap />}
       {viewMode === 'nrw' && (
-        <NRWCalculator 
-          onViewCustomer={handleViewCustomer}
-        />
+        <NRWCalculator onViewCustomer={handleViewCustomer} />
       )}
       {viewMode === 'customers' && (
         <CustomerHistory 
@@ -461,51 +404,59 @@ export default function DMAHistory() {
                 />
               </Box>
             </DialogTitle>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
+              <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)}>
+                <Tab label="Inlets/Outlets" />
+                <Tab label="Notes" />
+              </Tabs>
+            </Box>
             <DialogContent dividers>
-              <DMAInlets 
-                dma={selectedDMA} 
-                onShowChart={handleShowChart}
-                onShowMonthly={handleShowMonthly}
-              />
-              <Box sx={{ mt: 4 }}>
-                <DMAOutlets 
-                  outlets={selectedDMA.outlets} 
-                  onShowChart={handleShowChart}
-                  onShowMonthly={handleShowMonthly}
-                />
-              </Box>
+              {activeTab === 0 && (
+                <>
+                  <DMAInlets 
+                    dma={selectedDMA} 
+                    onShowChart={handleShowChart}
+                    onShowMonthly={handleShowMonthly}
+                  />
+                  <Box sx={{ mt: 4 }}>
+                    <DMAOutlets 
+                      outlets={selectedDMA.outlets} 
+                      onShowChart={handleShowChart}
+                      onShowMonthly={handleShowMonthly}
+                    />
+                  </Box>
+                </>
+              )}
               
-              {/* Notes Section */}
-              <Paper sx={{ p: 3, mt: 3 }}>
-                <Typography variant="h5" gutterBottom>Notes</Typography>
-                {getZoneNotes(selectedDMA.id).map((note, idx) => (
-                  <Card key={idx} sx={{ mb: 2, bgcolor: '#f8f9fa' }}>
-                    <CardContent>
-                      <Box display="flex" justifyContent="space-between" mb={1}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                          {note.author}
-                        </Typography>
-                        <Chip label={note.date} size="small" variant="outlined" />
-                      </Box>
-                      <Typography variant="body1">{note.text}</Typography>
-                    </CardContent>
-                  </Card>
-                ))}
-                {getZoneNotes(selectedDMA.id).length === 0 && (
-                  <Typography color="textSecondary" align="center" py={4}>
-                    No notes yet. Click "Add Note" to create one.
-                  </Typography>
-                )}
-              </Paper>
+              {activeTab === 1 && (
+                <Paper sx={{ p: 3 }}>
+                  <Typography variant="h5" gutterBottom>Notes</Typography>
+                  {getZoneNotes(selectedDMA.id).map((note, idx) => (
+                    <Card key={idx} sx={{ mb: 2, bgcolor: '#f8f9fa' }}>
+                      <CardContent>
+                        <Box display="flex" justifyContent="space-between" mb={1}>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                            {note.author}
+                          </Typography>
+                          <Chip label={note.date} size="small" variant="outlined" />
+                        </Box>
+                        <Typography variant="body1">{note.text}</Typography>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {getZoneNotes(selectedDMA.id).length === 0 && (
+                    <Typography color="textSecondary" align="center" py={4}>
+                      No notes yet. Click "Add Note" to create one.
+                    </Typography>
+                  )}
+                </Paper>
+              )}
             </DialogContent>
             <DialogActions sx={{ p: 3 }}>
               <Button onClick={() => setDetailsOpen(false)} size="large">Close</Button>
               <Button 
                 variant="contained" 
-                onClick={() => {
-                  setDetailsOpen(false);
-                  setNoteDialog(true);
-                }}
+                onClick={() => setNoteDialog(true)}
                 size="large"
                 sx={{ bgcolor: selectedDMA.color }}
               >
@@ -514,6 +465,32 @@ export default function DMAHistory() {
             </DialogActions>
           </>
         )}
+      </Dialog>
+
+      {/* Analytics Dialog */}
+      <Dialog open={analyticsOpen} onClose={() => setAnalyticsOpen(false)} maxWidth="xl" fullWidth>
+        <DialogTitle sx={{ bgcolor: '#f5f5f5' }}>
+          <Box display="flex" justifyContent="space-between" alignItems="center">
+            <Typography variant="h4">
+              <AnalyticsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+              Consumption Analytics: {selectedDMA?.name}
+            </Typography>
+            <IconButton onClick={() => setAnalyticsOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedDMA && (
+            <DMAConsumptionAnalytics 
+              dmaList={[selectedDMA]} 
+              selectedDMAId={selectedDMA.id}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAnalyticsOpen(false)}>Close</Button>
+        </DialogActions>
       </Dialog>
 
       {/* Historical Chart Dialog */}

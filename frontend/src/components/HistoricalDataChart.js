@@ -1,36 +1,15 @@
+// In HistoricalDataChart.js
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Paper,
-  Typography,
-  CircularProgress,
-  Alert,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip
-} from '@mui/material';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer
-} from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Chip, Box, Typography } from '@mui/material';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://192.168.1.16:8000/api';
+const API_URL = 'http://localhost:8000/api';
 
 export default function HistoricalDataChart({ dmaId, pointName }) {
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [readings, setReadings] = useState([]);
+  const [sources, setSources] = useState({ manual: 0, mobile: 0 });
 
   useEffect(() => {
     fetchHistory();
@@ -38,101 +17,70 @@ export default function HistoricalDataChart({ dmaId, pointName }) {
 
   const fetchHistory = async () => {
     try {
-      setLoading(true);
-      const response = await axios.get(
-        `${API_URL}/bulk-readings/${dmaId}/${pointName}/history?days=90`
-      );
+      const response = await axios.get(`${API_URL}/reading-history/${dmaId}/${pointName}`);
+      const readings = response.data;
       
-      // Format data for chart
-      const formattedData = response.data.map(reading => ({
-        date: new Date(reading.timestamp).toLocaleDateString(),
-        value: reading.meterReading,
-        timestamp: reading.timestamp
-      })).reverse();
+      // Count sources
+      const manualCount = readings.filter(r => r.source === 'manual').length;
+      const mobileCount = readings.filter(r => r.source === 'mobile').length;
+      setSources({ manual: manualCount, mobile: mobileCount });
       
-      setReadings(formattedData);
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching history:', err);
-      setError('Failed to load historical data');
+      // Format for chart
+      const chartData = readings.map(r => ({
+        date: new Date(r.readingDate).toLocaleDateString(),
+        value: r.readingValue,
+        source: r.source || (r.meterId === 'Mobile App' ? 'mobile' : 'manual')
+      })).reverse(); // Oldest to newest for chart
+      
+      setData(chartData);
+    } catch (error) {
+      console.error('Failed to fetch history:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" p={4}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>
-    );
-  }
-
-  if (readings.length === 0) {
-    return (
-      <Alert severity="info" sx={{ m: 2 }}>
-        No historical data available for {pointName}
-      </Alert>
-    );
-  }
+  if (loading) return <Typography>Loading...</Typography>;
 
   return (
     <Box>
-      {/* Chart */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Reading Trends - Last 90 Days
-        </Typography>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={readings}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" angle={-45} textAnchor="end" height={60} />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Line 
-              type="monotone" 
-              dataKey="value" 
-              stroke="#1976d2" 
-              strokeWidth={2}
-              name="Meter Reading (m³)"
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </Paper>
-
-      {/* Data Table */}
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
-            <TableRow sx={{ bgcolor: '#1976d2' }}>
-              <TableCell sx={{ color: 'white' }}>Date</TableCell>
-              <TableCell sx={{ color: 'white' }} align="right">Reading (m³)</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {readings.slice(0, 10).map((reading, idx) => (
-              <TableRow key={idx}>
-                <TableCell>{reading.date}</TableCell>
-                <TableCell align="right">
-                  <Chip 
-                    label={`${reading.value} m³`}
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <Box display="flex" gap={1} mb={2}>
+        <Chip 
+          label={`Manual: ${sources.manual}`} 
+          size="small" 
+          color="primary" 
+          variant="outlined"
+        />
+        <Chip 
+          label={`Mobile: ${sources.mobile}`} 
+          size="small" 
+          color="success" 
+          variant="outlined"
+        />
+        <Chip 
+          label={`Total: ${data.length}`} 
+          size="small" 
+          color="info" 
+        />
+      </Box>
+      
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="date" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Line 
+            type="monotone" 
+            dataKey="value" 
+            stroke="#1976d2" 
+            name="Reading (m³)"
+            strokeWidth={2}
+            dot={{ r: 4 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </Box>
   );
 }

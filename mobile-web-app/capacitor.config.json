@@ -1,18 +1,6 @@
 {
-  "appId": "com.bulkmeter.app",
-  "appName": "Bulk Meter Reader",
+  "appId": "com.beki65.bulkmeter",
+  "appName": "Bulk Meter Test",
   "webDir": "build",
-  "bundledWebRuntime": false,
-  "server": {
-    "url": "https://bulk-meter-mobile.onrender.com",
-    "cleartext": true,
-    "androidScheme": "https",
-    "allowNavigation": [
-      "bulk-meter-mobile.onrender.com"
-    ]
-  },
-  "android": {
-    "allowMixedContent": true,
-    "webContentsDebuggingEnabled": true
-  }
+  "bundledWebRuntime": false
 }

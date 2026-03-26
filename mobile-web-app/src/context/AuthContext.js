@@ -1,85 +1,52 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
-import localforage from 'localforage';
+import { API_URL } from '../config';
 
-const AuthContext = createContext({});
+const AuthContext = createContext();
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  return useContext(AuthContext);
+}
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const API_URL = 'http://192.168.1.111:8000/api';
 
   useEffect(() => {
-    loadStoredUser();
+    // Check for saved user
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+    setLoading(false);
   }, []);
 
-  const loadStoredUser = async () => {
+  const login = async (email, password) => {
     try {
-      const userData = await localforage.getItem('user');
-      const token = await localforage.getItem('token');
-      
-      if (userData && token) {
-        setUser(userData);
-        // Set default axios authorization header
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      }
-    } catch (error) {
-      console.error('Error loading user:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const login = async (username, password) => {
-    try {
-      setError(null);
-      const response = await axios.post(`${API_URL}/auth/login`, {
-        username,
-        password
-      });
-      
-      const { token, ...userData } = response.data;
-      
-      // Store auth data
-      await localforage.setItem('user', userData);
-      await localforage.setItem('token', token);
-      
-      // Set default axios header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      setUser(userData);
+      const response = await axios.post(`${API_URL}/auth/login`, { email, password });
+      setUser(response.data.user);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
       return { success: true };
     } catch (error) {
-      const message = error.response?.data?.message || 'Login failed';
-      setError(message);
-      return { success: false, error: message };
+      return { success: false, error: error.response?.data?.message || 'Login failed' };
     }
   };
 
-  const logout = async () => {
-    try {
-      await localforage.removeItem('user');
-      await localforage.removeItem('token');
-      delete axios.defaults.headers.common['Authorization'];
-      setUser(null);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('user');
+  };
+
+  const value = {
+    user,
+    login,
+    logout,
+    loading
   };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      loading,
-      error,
-      login,
-      logout
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
-};
+}

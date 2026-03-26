@@ -11,7 +11,6 @@ import {
   IconButton,
   Tooltip,
   Avatar,
-  LinearProgress,
   Chip,
   Button,
   List,
@@ -21,16 +20,14 @@ import {
   ListItemText,
   Divider,
   TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import {
   LineChart,
@@ -59,10 +56,15 @@ import LeakAddIcon from '@mui/icons-material/LeakAdd';
 import BiotechIcon from '@mui/icons-material/Biotech';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import TimelineIcon from '@mui/icons-material/Timeline';
+import HistoryIcon from '@mui/icons-material/History';
+import AddIcon from '@mui/icons-material/Add';
+import axios from 'axios';
 import { dmaAPI, nrwAPI, analyticsAPI } from '../services/api';
 import HistoricalDataChart from '../components/HistoricalDataChart';
 import DMAMap from '../components/DMAMap';
+import CustomerHistory from '../components/CustomerHistory';
 
+const API_URL = 'http://localhost:8000/api';
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
 export default function Dashboard() {
@@ -74,56 +76,67 @@ export default function Dashboard() {
   const [selectedParent, setSelectedParent] = useState('adma');
   const [selectedChild, setSelectedChild] = useState('bulk');
   const [nrwInput, setNrwInput] = useState({ systemInput: 950000, billedConsumption: 775000 });
-  const [customerSearch, setCustomerSearch] = useState('');
   
   // History dialog state
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState(null);
+  
+  // System Inflow states
+  const [systemInflowData, setSystemInflowData] = useState({});
+  const [selectedInflowMonth, setSelectedInflowMonth] = useState('');
+  const [availableMonths, setAvailableMonths] = useState([]);
+  const [loadingInflow, setLoadingInflow] = useState(false);
+  
+  // Manual Reading states
+  const [manualReadings, setManualReadings] = useState({});
+  const [showManualInput, setShowManualInput] = useState({});
+  const [readingValue, setReadingValue] = useState({});
+  const [readingDate, setReadingDate] = useState({});
+  const [saving, setSaving] = useState(false);
 
   // Menu items for left navigation
- const menuItems = [
-  {
-    id: 'adma',
-    label: "DMA's",
-    icon: <WaterDropIcon />,
-    color: '#1976d2',
-    children: [
-      { id: 'bulk', label: 'DMA BULK', icon: <DashboardIcon /> },
-      { id: 'map', label: 'MAP VIEW', icon: <MapIcon /> },
-      { id: 'nrw', label: 'NRW CALCULATOR', icon: <CalculateIcon /> },
-      { id: 'customers', label: 'CUSTOMERS', icon: <PeopleIcon /> },
-      { id: 'about', label: 'ABOUT', icon: <InfoIcon /> }
-    ]
-  },
-  {
-    id: 'leaks',
-    label: "Leaks Location",
-    icon: <LeakAddIcon />,
-    color: '#d32f2f',
-    children: [
-      { id: 'leaks-map', label: 'Leaks Mapping', icon: <LocationOnIcon /> },
-      { id: 'leaks-calculation', label: 'Leaks Calculation', icon: <CalculateIcon /> },
-      { id: 'leaks-progress', label: 'MLWR Progress', icon: <TimelineIcon /> }
-    ]
-  },
-  {
-    id: 'contamination',
-    label: "Contamination",
-    icon: <BiotechIcon />,
-    color: '#ed6c02',
-    children: [
-      { id: 'contamination-map', label: 'Location/Mapping', icon: <LocationOnIcon /> },
-      { id: 'contamination-reason', label: 'Reason of Contamination', icon: <InfoIcon /> },
-      { id: 'contamination-progress', label: 'MLWR Progress', icon: <TimelineIcon /> }
-    ]
-  }
+  const menuItems = [
+    {
+      id: 'adma',
+      label: "DMA's",
+      icon: <WaterDropIcon />,
+      color: '#1976d2',
+      children: [
+        { id: 'bulk', label: 'DMA BULK', icon: <DashboardIcon /> },
+        { id: 'map', label: 'MAP VIEW', icon: <MapIcon /> },
+        { id: 'nrw', label: 'NRW CALCULATOR', icon: <CalculateIcon /> },
+        { id: 'customers', label: 'CUSTOMERS', icon: <PeopleIcon /> },
+        { id: 'about', label: 'ABOUT', icon: <InfoIcon /> }
+      ]
+    },
+    {
+      id: 'leaks',
+      label: "Leaks Location",
+      icon: <LeakAddIcon />,
+      color: '#d32f2f',
+      children: [
+        { id: 'leaks-map', label: 'Leaks Mapping', icon: <LocationOnIcon /> },
+        { id: 'leaks-calculation', label: 'Leaks Calculation', icon: <CalculateIcon /> },
+        { id: 'leaks-progress', label: 'MLWR Progress', icon: <TimelineIcon /> }
+      ]
+    },
+    {
+      id: 'contamination',
+      label: "Contamination",
+      icon: <BiotechIcon />,
+      color: '#ed6c02',
+      children: [
+        { id: 'contamination-map', label: 'Location/Mapping', icon: <LocationOnIcon /> },
+        { id: 'contamination-reason', label: 'Reason of Contamination', icon: <InfoIcon /> },
+        { id: 'contamination-progress', label: 'MLWR Progress', icon: <TimelineIcon /> }
+      ]
+    }
   ];
 
   const fetchData = async () => {
     try {
       setLoading(true);
       
-      // Fetch real data from backend - NO MOCK DATA
       const [dmaResponse, nrwResponse, analyticsResponse] = await Promise.all([
         dmaAPI.getHistory(),
         nrwAPI.calculate(nrwInput),
@@ -142,9 +155,120 @@ export default function Dashboard() {
     }
   };
 
+  // Fetch available months
+  const fetchAvailableMonths = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/months`);
+      setAvailableMonths(response.data);
+      if (response.data.length > 0) {
+        setSelectedInflowMonth(response.data[0].label);
+      }
+    } catch (error) {
+      console.error('Failed to fetch months:', error);
+    }
+  };
+
+  // Fetch system inflow for all DMAs
+  const fetchSystemInflow = async (year, month) => {
+    setLoadingInflow(true);
+    try {
+      const response = await axios.get(`${API_URL}/dma/water-balance-summary`, {
+        params: { year, month }
+      });
+      
+      const inflowMap = {};
+      response.data.dmas.forEach(dma => {
+        inflowMap[dma.dmaId] = dma;
+      });
+      setSystemInflowData(inflowMap);
+      
+    } catch (error) {
+      console.error('Failed to fetch system inflow:', error);
+    } finally {
+      setLoadingInflow(false);
+    }
+  };
+
+  // Fetch manual readings for a specific point
+  const fetchManualReadings = async (dmaId, pointName) => {
+    try {
+      const response = await axios.get(`${API_URL}/reading-history/${dmaId}/${pointName}`);
+      setManualReadings(prev => ({
+        ...prev,
+        [`${dmaId}-${pointName}`]: response.data
+      }));
+    } catch (error) {
+      console.error('Failed to fetch readings:', error);
+    }
+  };
+
+  // Save manual reading
+  const saveManualReading = async (dmaId, pointName, pointType, value, date) => {
+    if (!value || !date) {
+      alert('Please enter both reading value and date');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await axios.post(`${API_URL}/reading-history`, {
+        dmaId,
+        pointName,
+        pointType,
+        readingDate: date,
+        readingValue: parseFloat(value),
+        source: 'manual'
+      });
+      
+      // Refresh readings
+      await fetchManualReadings(dmaId, pointName);
+      
+      // Clear input
+      setShowManualInput(prev => ({ ...prev, [`${dmaId}-${pointName}`]: false }));
+      setReadingValue(prev => ({ ...prev, [`${dmaId}-${pointName}`]: '' }));
+      setReadingDate(prev => ({ ...prev, [`${dmaId}-${pointName}`]: '' }));
+      
+      // Refresh system inflow data
+      if (selectedInflowMonth) {
+        const [monthName, yearStr] = selectedInflowMonth.split(' ');
+        const monthMap = {
+          'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6,
+          'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12
+        };
+        const month = monthMap[monthName];
+        const year = parseInt(yearStr);
+        fetchSystemInflow(year, month);
+      }
+      
+      alert('Reading saved successfully!');
+    } catch (error) {
+      console.error('Failed to save reading:', error);
+      alert('Failed to save reading');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    fetchAvailableMonths();
+  }, []);
+
+  useEffect(() => {
+    if (selectedInflowMonth) {
+      const [monthName, yearStr] = selectedInflowMonth.split(' ');
+      const monthMap = {
+        'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6,
+        'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12
+      };
+      const month = monthMap[monthName];
+      const year = parseInt(yearStr);
+      fetchSystemInflow(year, month);
+    }
+  }, [selectedInflowMonth]);
 
   // Calculate totals from real data
   const totalConnections = dmaData?.zones?.reduce((acc, zone) => acc + (zone.totalConnections || 0), 0) || 0;
@@ -157,13 +281,7 @@ export default function Dashboard() {
     { name: 'Bursts', value: nrwData.components.bursts },
   ] : [];
 
-  const formatLastReading = (lastReading) => {
-    if (!lastReading) return 'No data';
-    const date = new Date(lastReading.timestamp);
-    return `Last: ${lastReading.value} m³ at ${date.toLocaleTimeString()}`;
-  };
-
-  // DMA Bulk Content with real data only
+  // DMA Bulk Content with Integrated Manual Readings and System Inflow
   const renderDMABulk = () => {
     if (!dmaData?.zones || dmaData.zones.length === 0) {
       return (
@@ -177,11 +295,35 @@ export default function Dashboard() {
 
     return (
       <Box>
-        <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, color: '#1e3a8a', mb: 3 }}>
-          DMA Zones
-        </Typography>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+          <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, color: '#1e3a8a' }}>
+            DMA Zones
+          </Typography>
+          
+          {/* Month Selector for System Inflow */}
+          <Box display="flex" alignItems="center" gap={2}>
+            <Typography variant="body2" color="textSecondary">
+              System Inflow for:
+            </Typography>
+            <FormControl size="small" sx={{ minWidth: 150 }}>
+              <InputLabel>Select Month</InputLabel>
+              <Select
+                value={selectedInflowMonth}
+                label="Select Month"
+                onChange={(e) => setSelectedInflowMonth(e.target.value)}
+              >
+                {availableMonths.map((month) => (
+                  <MenuItem key={month.label} value={month.label}>
+                    {month.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {loadingInflow && <CircularProgress size={20} />}
+          </Box>
+        </Box>
         
-        {/* KPI Cards - Only show if data exists */}
+        {/* KPI Cards */}
         {(totalConnections > 0 || activeMeters > 0) && (
           <Grid container spacing={3} sx={{ mb: 4 }}>
             {totalConnections > 0 && (
@@ -266,174 +408,338 @@ export default function Dashboard() {
           </Grid>
         )}
 
-        {/* DMA Zone Cards with real inlet/outlet data */}
+        {/* DMA Zone Cards with Integrated Manual Readings and System Inflow */}
         <Grid container spacing={3}>
-          {dmaData.zones.map((zone, index) => (
-            <Grid item xs={12} md={4} key={index}>
-              <Card sx={{ 
-                borderLeft: 6, 
-                borderColor: index === 0 ? '#FF6B6B' : index === 1 ? '#4ECDC4' : '#95A5A6',
-                height: '100%'
-              }}>
-                <CardContent>
-                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                    <Typography variant="h5" sx={{ fontWeight: 600 }}>{zone.name}</Typography>
-                    <Chip 
-                      label={zone.id} 
-                      size="small" 
-                      sx={{
-                        bgcolor: index === 0 ? '#FF6B6B' : index === 1 ? '#4ECDC4' : '#95A5A6',
-                        color: 'white',
-                        fontWeight: 600
-                      }}
-                    />
-                  </Box>
-                  
-                  <Divider sx={{ my: 2 }} />
-                  
-                  {/* Inlets Section */}
-                  <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: '#1976d2' }}>
-                    Inlets ({zone.inlets?.length || 0})
-                  </Typography>
-                  
-                  {zone.inlets?.map((inlet, i) => (
-                    <Card key={i} variant="outlined" sx={{ 
-                      mb: 2, 
-                      borderLeft: 4, 
-                      borderColor: '#1976d2',
-                      bgcolor: inlet.lastReading ? '#f8f9fa' : '#fff'
-                    }}>
-                      <CardContent>
-                        <Box display="flex" justifyContent="space-between" alignItems="center">
-                          <Box>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                              {inlet.name}
+          {dmaData.zones.map((zone, index) => {
+            const inflowInfo = systemInflowData[zone.id];
+            
+            return (
+              <Grid item xs={12} md={4} key={index}>
+                <Card sx={{ 
+                  borderLeft: 6, 
+                  borderColor: index === 0 ? '#FF6B6B' : index === 1 ? '#4ECDC4' : '#95A5A6',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  <CardContent sx={{ flexGrow: 1 }}>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                      <Typography variant="h5" sx={{ fontWeight: 600 }}>{zone.name}</Typography>
+                      <Chip 
+                        label={zone.id} 
+                        size="small" 
+                        sx={{
+                          bgcolor: index === 0 ? '#FF6B6B' : index === 1 ? '#4ECDC4' : '#95A5A6',
+                          color: 'white',
+                          fontWeight: 600
+                        }}
+                      />
+                    </Box>
+                    
+                    <Divider sx={{ my: 2 }} />
+                    
+                    {/* System Inflow Section - Integrated inside each DMA */}
+                    <Box sx={{ mb: 3, p: 2, bgcolor: '#e8f5e9', borderRadius: 2 }}>
+                      <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600, color: '#2e7d32' }}>
+                        💧 System Inflow ({selectedInflowMonth || 'Select Month'})
+                      </Typography>
+                      {inflowInfo ? (
+                        <Grid container spacing={1}>
+                          <Grid item xs={6}>
+                            <Typography variant="caption" color="textSecondary">Water Entering</Typography>
+                            <Typography variant="h6" color="primary">
+                              {inflowInfo.inflow?.toLocaleString() || 0} m³
                             </Typography>
-                            {inlet.lastReading ? (
-                              <Box mt={0.5}>
-                                <Chip 
-                                  size="small"
-                                  label="LIVE"
-                                  color="success"
-                                  sx={{ mr: 1, height: 20 }}
-                                />
-                                <Typography variant="caption" color="success.main">
-                                  Last: {inlet.lastReading.value} m³
-                                </Typography>
-                              </Box>
-                            ) : (
-                              <Typography variant="caption" color="textSecondary">
-                                No readings yet
-                              </Typography>
-                            )}
-                          </Box>
-                          <Box>
-                            <Button 
-                              size="small" 
-                              variant="text"
-                              sx={{ minWidth: 'auto', mr: 0.5 }}
-                              onClick={() => {
-                                setSelectedPoint({ 
-                                  dmaId: zone.id, 
-                                  pointName: inlet.name, 
-                                  pointType: 'inlet' 
-                                });
-                                setHistoryDialogOpen(true);
-                              }}
-                            >
-                              HISTORY
-                            </Button>
-                            <Button 
-                              size="small" 
-                              variant="outlined"
-                              sx={{ minWidth: 'auto' }}
-                            >
-                              MANUAL
-                            </Button>
-                          </Box>
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  ))}
-
-                  {/* Outlets Section */}
-                  <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: '#f57c00', mt: 3 }}>
-                    Outlets ({zone.outlets?.length || 0})
-                  </Typography>
-                  
-                  {zone.outlets?.map((outlet, i) => (
-                    <Card key={i} variant="outlined" sx={{ 
-                      mb: 2, 
-                      borderLeft: 4, 
-                      borderColor: '#f57c00',
-                      bgcolor: outlet.lastReading ? '#f8f9fa' : '#fff'
-                    }}>
-                      <CardContent>
-                        <Box display="flex" justifyContent="space-between" alignItems="center">
-                          <Box>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                              {outlet.name}
+                          </Grid>
+                          <Grid item xs={6}>
+                            <Typography variant="caption" color="textSecondary">Water Exiting</Typography>
+                            <Typography variant="h6" color="warning.main">
+                              {inflowInfo.outflow?.toLocaleString() || 0} m³
                             </Typography>
-                            {outlet.lastReading ? (
-                              <Box mt={0.5}>
-                                <Chip 
-                                  size="small"
-                                  label="LIVE"
-                                  color="success"
-                                  sx={{ mr: 1, height: 20 }}
-                                />
-                                <Typography variant="caption" color="success.main">
-                                  Last: {outlet.lastReading.value} m³
-                                </Typography>
-                              </Box>
-                            ) : (
-                              <Typography variant="caption" color="textSecondary">
-                                No readings yet
-                              </Typography>
-                            )}
-                          </Box>
-                          <Box>
-                            <Button 
-                              size="small" 
-                              variant="text"
-                              sx={{ minWidth: 'auto', mr: 0.5 }}
-                              onClick={() => {
-                                setSelectedPoint({ 
-                                  dmaId: zone.id, 
-                                  pointName: outlet.name, 
-                                  pointType: 'outlet' 
-                                });
-                                setHistoryDialogOpen(true);
-                              }}
-                            >
-                              HISTORY
-                            </Button>
-                            <Button 
-                              size="small" 
-                              variant="outlined"
-                              sx={{ minWidth: 'auto' }}
-                            >
-                              MANUAL
-                            </Button>
-                          </Box>
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  ))}
-
-                  {/* If no outlets */}
-                  {(!zone.outlets || zone.outlets.length === 0) && (
-                    <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1, mb: 2 }}>
-                      No outlets configured
+                          </Grid>
+                          <Grid item xs={12}>
+                            <Divider sx={{ my: 1 }} />
+                            <Typography variant="caption" color="textSecondary">Net Inflow</Typography>
+                            <Typography variant="subtitle1" fontWeight="bold">
+                              {inflowInfo.netInflow?.toLocaleString() || 0} m³
+                            </Typography>
+                          </Grid>
+                        </Grid>
+                      ) : (
+                        <Typography variant="body2" color="textSecondary" sx={{ textAlign: 'center', py: 1 }}>
+                          No inflow data for selected month
+                        </Typography>
+                      )}
+                    </Box>
+                    
+                    {/* Inlets Section with Manual Entry */}
+                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: '#1976d2' }}>
+                      Inlets ({zone.inlets?.length || 0})
                     </Typography>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
+                    
+                    {zone.inlets?.map((inlet, i) => {
+                      const readings = manualReadings[`${zone.id}-${inlet.name}`];
+                      const latestReading = readings?.[0];
+                      const showInput = showManualInput[`${zone.id}-${inlet.name}`];
+                      
+                      return (
+                        <Card key={i} variant="outlined" sx={{ 
+                          mb: 2, 
+                          borderLeft: 4, 
+                          borderColor: '#1976d2',
+                          bgcolor: '#f8f9fa'
+                        }}>
+                          <CardContent>
+                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                {inlet.name}
+                              </Typography>
+                              <Box>
+                                <Button 
+                                  size="small" 
+                                  variant="text"
+                                  onClick={() => {
+                                    fetchManualReadings(zone.id, inlet.name);
+                                    setShowManualInput(prev => ({ 
+                                      ...prev, 
+                                      [`${zone.id}-${inlet.name}`]: !showInput 
+                                    }));
+                                  }}
+                                >
+                                  {showInput ? 'Hide' : 'MANUAL'}
+                                </Button>
+                                <Button 
+                                  size="small" 
+                                  variant="outlined"
+                                  sx={{ ml: 1 }}
+                                  onClick={() => {
+                                    setSelectedPoint({ 
+                                      dmaId: zone.id, 
+                                      pointName: inlet.name, 
+                                      pointType: 'inlet' 
+                                    });
+                                    setHistoryDialogOpen(true);
+                                  }}
+                                >
+                                  HISTORY
+                                </Button>
+                              </Box>
+                            </Box>
+                            
+                            {/* Current Reading Display */}
+                            {latestReading ? (
+                              <Box mt={1}>
+                                <Chip 
+                                  size="small"
+                                  label="LIVE"
+                                  color="success"
+                                  sx={{ mr: 1, height: 20 }}
+                                />
+                                <Typography variant="caption" color="success.main">
+                                  Last: {latestReading.readingValue.toLocaleString()} m³ 
+                                  ({new Date(latestReading.readingDate).toLocaleDateString()})
+                                </Typography>
+                              </Box>
+                            ) : (
+                              <Typography variant="caption" color="textSecondary">
+                                No readings yet
+                              </Typography>
+                            )}
+                            
+                            {/* Manual Input Form */}
+                            {showInput && (
+                              <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                <Typography variant="caption" fontWeight="bold" gutterBottom>
+                                  Enter New Reading:
+                                </Typography>
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  type="number"
+                                  label="Reading Value (m³)"
+                                  value={readingValue[`${zone.id}-${inlet.name}`] || ''}
+                                  onChange={(e) => setReadingValue(prev => ({ 
+                                    ...prev, 
+                                    [`${zone.id}-${inlet.name}`]: e.target.value 
+                                  }))}
+                                  sx={{ mt: 1, mb: 1 }}
+                                />
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  type="date"
+                                  label="Reading Date"
+                                  value={readingDate[`${zone.id}-${inlet.name}`] || ''}
+                                  onChange={(e) => setReadingDate(prev => ({ 
+                                    ...prev, 
+                                    [`${zone.id}-${inlet.name}`]: e.target.value 
+                                  }))}
+                                  InputLabelProps={{ shrink: true }}
+                                  sx={{ mb: 1 }}
+                                />
+                                <Button
+                                  fullWidth
+                                  variant="contained"
+                                  size="small"
+                                  disabled={saving}
+                                  onClick={() => saveManualReading(
+                                    zone.id, 
+                                    inlet.name, 
+                                    'inlet',
+                                    readingValue[`${zone.id}-${inlet.name}`],
+                                    readingDate[`${zone.id}-${inlet.name}`]
+                                  )}
+                                >
+                                  {saving ? <CircularProgress size={20} /> : 'Save Reading'}
+                                </Button>
+                              </Box>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+
+                    {/* Outlets Section with Manual Entry */}
+                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: '#f57c00', mt: 3 }}>
+                      Outlets ({zone.outlets?.length || 0})
+                    </Typography>
+                    
+                    {zone.outlets?.map((outlet, i) => {
+                      const readings = manualReadings[`${zone.id}-${outlet.name}`];
+                      const latestReading = readings?.[0];
+                      const showInput = showManualInput[`${zone.id}-${outlet.name}`];
+                      
+                      return (
+                        <Card key={i} variant="outlined" sx={{ 
+                          mb: 2, 
+                          borderLeft: 4, 
+                          borderColor: '#f57c00',
+                          bgcolor: '#f8f9fa'
+                        }}>
+                          <CardContent>
+                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                {outlet.name}
+                              </Typography>
+                              <Box>
+                                <Button 
+                                  size="small" 
+                                  variant="text"
+                                  onClick={() => {
+                                    fetchManualReadings(zone.id, outlet.name);
+                                    setShowManualInput(prev => ({ 
+                                      ...prev, 
+                                      [`${zone.id}-${outlet.name}`]: !showInput 
+                                    }));
+                                  }}
+                                >
+                                  {showInput ? 'Hide' : 'MANUAL'}
+                                </Button>
+                                <Button 
+                                  size="small" 
+                                  variant="outlined"
+                                  sx={{ ml: 1 }}
+                                  onClick={() => {
+                                    setSelectedPoint({ 
+                                      dmaId: zone.id, 
+                                      pointName: outlet.name, 
+                                      pointType: 'outlet' 
+                                    });
+                                    setHistoryDialogOpen(true);
+                                  }}
+                                >
+                                  HISTORY
+                                </Button>
+                              </Box>
+                            </Box>
+                            
+                            {/* Current Reading Display */}
+                            {latestReading ? (
+                              <Box mt={1}>
+                                <Chip 
+                                  size="small"
+                                  label="LIVE"
+                                  color="success"
+                                  sx={{ mr: 1, height: 20 }}
+                                />
+                                <Typography variant="caption" color="success.main">
+                                  Last: {latestReading.readingValue.toLocaleString()} m³ 
+                                  ({new Date(latestReading.readingDate).toLocaleDateString()})
+                                </Typography>
+                              </Box>
+                            ) : (
+                              <Typography variant="caption" color="textSecondary">
+                                No readings yet
+                              </Typography>
+                            )}
+                            
+                            {/* Manual Input Form */}
+                            {showInput && (
+                              <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                <Typography variant="caption" fontWeight="bold" gutterBottom>
+                                  Enter New Reading:
+                                </Typography>
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  type="number"
+                                  label="Reading Value (m³)"
+                                  value={readingValue[`${zone.id}-${outlet.name}`] || ''}
+                                  onChange={(e) => setReadingValue(prev => ({ 
+                                    ...prev, 
+                                    [`${zone.id}-${outlet.name}`]: e.target.value 
+                                  }))}
+                                  sx={{ mt: 1, mb: 1 }}
+                                />
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  type="date"
+                                  label="Reading Date"
+                                  value={readingDate[`${zone.id}-${outlet.name}`] || ''}
+                                  onChange={(e) => setReadingDate(prev => ({ 
+                                    ...prev, 
+                                    [`${zone.id}-${outlet.name}`]: e.target.value 
+                                  }))}
+                                  InputLabelProps={{ shrink: true }}
+                                  sx={{ mb: 1 }}
+                                />
+                                <Button
+                                  fullWidth
+                                  variant="contained"
+                                  size="small"
+                                  disabled={saving}
+                                  onClick={() => saveManualReading(
+                                    zone.id, 
+                                    outlet.name, 
+                                    'outlet',
+                                    readingValue[`${zone.id}-${outlet.name}`],
+                                    readingDate[`${zone.id}-${outlet.name}`]
+                                  )}
+                                >
+                                  {saving ? <CircularProgress size={20} /> : 'Save Reading'}
+                                </Button>
+                              </Box>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+
+                    {/* If no outlets */}
+                    {(!zone.outlets || zone.outlets.length === 0) && (
+                      <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 1, mb: 2 }}>
+                        No outlets configured
+                      </Typography>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+            );
+          })}
         </Grid>
 
-        {/* Charts - Only show if history data exists */}
+        {/* Charts */}
         {dmaData?.history && dmaData.history.length > 0 && (
           <Grid container spacing={3} sx={{ mt: 4 }}>
             <Grid item xs={12} md={8}>
@@ -504,23 +810,25 @@ export default function Dashboard() {
       </Box>
     );
   };
-// About
-    const renderAbout = () => (
-   <Paper sx={{ p: 3 }}>
-    <Typography variant="h4" gutterBottom sx={{ color: '#1976d2', fontWeight: 600 }}>
-      Water Utility Management System
-    </Typography>
-    <Typography variant="h6" gutterBottom>Version 1.0.0</Typography>
-    <Divider sx={{ my: 2 }} />
-    <Typography variant="body1" paragraph>
-      Enterprise Grade Water Distribution Management System designed to monitor and manage DMA zones,
-      track consumption, detect leaks, and calculate Non-Revenue Water (NRW).
-    </Typography>
-    <Typography variant="body2" color="textSecondary">
-      © 2026 Water Utility. All rights reserved@bekaman.
-    </Typography>
-  </Paper>
-);
+
+  // About
+  const renderAbout = () => (
+    <Paper sx={{ p: 3 }}>
+      <Typography variant="h4" gutterBottom sx={{ color: '#1976d2', fontWeight: 600 }}>
+        Water Utility Management System
+      </Typography>
+      <Typography variant="h6" gutterBottom>Version 1.0.0</Typography>
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="body1" paragraph>
+        Enterprise Grade Water Distribution Management System designed to monitor and manage DMA zones,
+        track consumption, detect leaks, and calculate Non-Revenue Water (NRW).
+      </Typography>
+      <Typography variant="body2" color="textSecondary">
+        © 2026 Water Utility. All rights reserved.
+      </Typography>
+    </Paper>
+  );
+
   // NRW Calculator
   const renderNRWCalculator = () => (
     <Paper sx={{ p: 3 }}>
@@ -572,47 +880,23 @@ export default function Dashboard() {
   );
 
   // Customers
-  const renderCustomers = () => (
-    <Paper sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom sx={{ color: '#1976d2', fontWeight: 600 }}>
-        Customer Management
-      </Typography>
-      <TextField
-        fullWidth
-        label="Search Customer by ID or Name"
-        value={customerSearch}
-        onChange={(e) => setCustomerSearch(e.target.value)}
-        margin="normal"
-      />
-      <TableContainer component={Paper} sx={{ mt: 3 }}>
-        <Table>
-          <TableHead>
-            <TableRow sx={{ bgcolor: '#1976d2' }}>
-              <TableCell sx={{ color: 'white' }}>Customer ID</TableCell>
-              <TableCell sx={{ color: 'white' }}>Name</TableCell>
-              <TableCell sx={{ color: 'white' }}>Meter Number</TableCell>
-              <TableCell sx={{ color: 'white' }}>Zone</TableCell>
-              <TableCell sx={{ color: 'white' }}>Status</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {/* This would be populated from real API */}
-            <TableRow>
-              <TableCell colSpan={5} align="center">
-                <Typography color="textSecondary">No customer data available</Typography>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Paper>
-  );
+  const renderCustomers = () => {
+    const dmaZones = dmaData?.zones?.map(zone => ({
+      id: zone.id,
+      name: zone.name
+    })) || [];
+
+    return (
+      <Box>
+        <CustomerHistory dmaList={dmaZones} />
+      </Box>
+    );
+  };
 
   // Map View
- const renderMapView = () => (
-  <DMAMap />
+  const renderMapView = () => (
+    <DMAMap />
   );
-
 
   // Leaks Content
   const renderLeaksContent = () => (
@@ -638,57 +922,54 @@ export default function Dashboard() {
     </Paper>
   );
 
-  /// Main render function
-const renderContent = () => {
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box textAlign="center" py={4}>
-        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
-        <Button variant="contained" onClick={fetchData} startIcon={<RefreshIcon />}>
-          Retry Connection
-        </Button>
-      </Box>
-    );
-  }
-
-  // DMA's children
-  if (selectedParent === 'adma') {
-    switch(selectedChild) {
-      case 'bulk':
-        return renderDMABulk();
-      case 'map':
-        return renderMapView();
-      case 'nrw':
-        return renderNRWCalculator();
-      case 'customers':
-        return renderCustomers();
-      case 'about':
-        return renderAbout();
-      default:
-        return renderDMABulk();
+  // Main render function
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+          <CircularProgress />
+        </Box>
+      );
     }
-  }
 
-  // Leaks children
-  if (selectedParent === 'leaks') {
-    return renderLeaksContent();
-  }
+    if (error) {
+      return (
+        <Box textAlign="center" py={4}>
+          <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+          <Button variant="contained" onClick={fetchData} startIcon={<RefreshIcon />}>
+            Retry Connection
+          </Button>
+        </Box>
+      );
+    }
 
-  // Contamination children
-  if (selectedParent === 'contamination') {
-    return renderContaminationContent();
-  }
+    if (selectedParent === 'adma') {
+      switch(selectedChild) {
+        case 'bulk':
+          return renderDMABulk();
+        case 'map':
+          return renderMapView();
+        case 'nrw':
+          return renderNRWCalculator();
+        case 'customers':
+          return renderCustomers();
+        case 'about':
+          return renderAbout();
+        default:
+          return renderDMABulk();
+      }
+    }
 
-  return null;
-};
+    if (selectedParent === 'leaks') {
+      return renderLeaksContent();
+    }
+
+    if (selectedParent === 'contamination') {
+      return renderContaminationContent();
+    }
+
+    return null;
+  };
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f5f5f5' }}>

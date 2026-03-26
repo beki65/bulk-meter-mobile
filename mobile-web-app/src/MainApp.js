@@ -41,15 +41,20 @@ import {
   Sync as SyncIcon,
   WifiOff as OfflineIcon,
   Delete as DeleteIcon,
-  Refresh as RefreshIcon,
   NetworkCheck as NetworkIcon,
   DataUsage as DataIcon,
-  Warning as WarningIcon
+  Warning as WarningIcon,
+  Settings as SettingsIcon,
+  BugReport as BugReportIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import localforage from 'localforage';
 import axios from 'axios';
 import { useAuth } from './context/AuthContext';
 import { API_URL } from './config';
+import EnvironmentSwitcher from './components/EnvironmentSwitcher';
+import DebugScreen from './DebugScreen';
+
 // Configure localforage
 localforage.config({
   name: 'BulkMeterMobile',
@@ -69,9 +74,6 @@ const theme = createTheme({
     fontSize: 14,
   },
 });
-
-// API URL - Update this based on your deployment
-
 
 // DMA configurations
 const dmaConfigs = {
@@ -138,10 +140,8 @@ const useNetworkStatus = () => {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial check
     updateNetworkInfo();
 
-    // Listen for connection changes
     if ('connection' in navigator) {
       navigator.connection.addEventListener('change', updateNetworkInfo);
     }
@@ -199,6 +199,8 @@ export default function MainApp() {
   const [photo, setPhoto] = useState(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [dataUsageDialogOpen, setDataUsageDialogOpen] = useState(false);
+  const [showEnvSwitcher, setShowEnvSwitcher] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
   const { user, logout } = useAuth();
   
   const { networkType, isConnected, isMetered, connectionSpeed } = useNetworkStatus();
@@ -244,7 +246,7 @@ export default function MainApp() {
     setSnackbar({ open: true, message, severity });
   };
 
-  // GPS Capture using browser's geolocation
+  // GPS Capture
   const captureGps = () => {
     setGps(prev => ({ ...prev, loading: true }));
 
@@ -272,7 +274,7 @@ export default function MainApp() {
     );
   };
 
-  // Camera using browser's file input
+  // Camera
   const takePhoto = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -301,7 +303,6 @@ export default function MainApp() {
       return;
     }
 
-    // Check if selected item is an outlet
     const isOutlet = dmaConfigs[formData.dma]?.outlets.some(o => o.name === formData.inlet);
 
     const readingData = {
@@ -325,7 +326,6 @@ export default function MainApp() {
 
     showSnackbar(offline ? 'Saved offline' : 'Saved locally');
     
-    // Reset form
     setFormData({ dma: '', inlet: '', size: '', meterReading: '', notes: '' });
     setGps({ lat: null, lng: null, accuracy: null, loading: false });
     setPhoto(null);
@@ -359,7 +359,6 @@ export default function MainApp() {
         userName: reading.userName
       });
 
-      // Track data usage (approximate size of request)
       const requestSize = JSON.stringify(reading).length;
       await trackDataUsage(requestSize, networkType);
 
@@ -370,12 +369,12 @@ export default function MainApp() {
       }
       return false;
     } catch (error) {
-      console.error('❌ Sync failed:', error.response?.data || error.message);
+      console.error('❌ Sync failed:', error.message);
       throw error;
     }
   };
 
-  // Main sync function with network awareness
+  // Main sync function
   const syncWithServer = async () => {
     if (offline) {
       showSnackbar('Cannot sync while offline', 'warning');
@@ -388,7 +387,6 @@ export default function MainApp() {
       return;
     }
 
-    // Check if on mobile data and have large pending sync
     if (networkType === 'cellular' && isMetered && unsynced.length > 10) {
       setSyncDialogOpen(true);
       return;
@@ -397,15 +395,13 @@ export default function MainApp() {
     await performSync(unsynced);
   };
 
-  // Perform the actual sync
+  // Perform sync
   const performSync = async (unsynced) => {
     setSyncing(true);
     let successCount = 0;
 
     try {
-      // Different sync strategies based on connection
       if (networkType === 'cellular' && connectionSpeed < 0.5) {
-        // Slow mobile data - sync one by one with delay
         for (const reading of unsynced) {
           try {
             await syncSingleReading(reading);
@@ -416,7 +412,6 @@ export default function MainApp() {
           }
         }
       } else if (networkType === 'cellular') {
-        // Good mobile data - sync in batches
         const batchSize = 5;
         for (let i = 0; i < unsynced.length; i += batchSize) {
           const batch = unsynced.slice(i, i + batchSize);
@@ -424,7 +419,6 @@ export default function MainApp() {
           successCount += batch.length;
         }
       } else {
-        // WiFi - sync all at once
         await Promise.all(unsynced.map(reading => syncSingleReading(reading)));
         successCount = unsynced.length;
       }
@@ -445,7 +439,7 @@ export default function MainApp() {
     showSnackbar('Reading deleted');
   };
 
-  // Format bytes for display
+  // Format bytes
   const formatBytes = (bytes) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -457,7 +451,6 @@ export default function MainApp() {
   // Render capture screen
   const renderCaptureScreen = () => (
     <Box sx={{ p: 2 }}>
-      {/* Network indicator */}
       <Paper sx={{ p: 1, mb: 2, bgcolor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box display="flex" alignItems="center">
           <NetworkIcon sx={{ mr: 1, color: offline ? 'error.main' : 'success.main' }} />
@@ -470,7 +463,6 @@ export default function MainApp() {
         </Button>
       </Paper>
 
-      {/* DMA Selection */}
       <FormControl fullWidth sx={{ mb: 2 }}>
         <InputLabel>DMA Zone</InputLabel>
         <Select
@@ -484,7 +476,6 @@ export default function MainApp() {
         </Select>
       </FormControl>
 
-      {/* Inlet Selection */}
       {formData.dma && (
         <FormControl fullWidth sx={{ mb: 2 }}>
           <InputLabel>Inlet/Outlet</InputLabel>
@@ -514,7 +505,6 @@ export default function MainApp() {
         </FormControl>
       )}
 
-      {/* Meter Reading */}
       <TextField
         fullWidth
         label="Meter Reading (m³)"
@@ -525,7 +515,6 @@ export default function MainApp() {
         autoFocus
       />
 
-      {/* Size Selection */}
       <FormControl fullWidth sx={{ mb: 2 }}>
         <InputLabel>Bulk Size</InputLabel>
         <Select
@@ -539,7 +528,6 @@ export default function MainApp() {
         </Select>
       </FormControl>
 
-      {/* Notes */}
       <TextField
         fullWidth
         label="Notes"
@@ -550,7 +538,6 @@ export default function MainApp() {
         sx={{ mb: 2 }}
       />
 
-      {/* Action Buttons */}
       <Grid container spacing={1} sx={{ mb: 2 }}>
         <Grid item xs={6}>
           <Button
@@ -577,7 +564,6 @@ export default function MainApp() {
         </Grid>
       </Grid>
 
-      {/* Status Display */}
       {gps.lat && (
         <Alert severity="success" sx={{ mb: 2, py: 0.5 }}>
           📍 GPS: ±{Math.round(gps.accuracy)}m
@@ -589,7 +575,6 @@ export default function MainApp() {
         </Alert>
       )}
 
-      {/* Save Button */}
       <Button
         fullWidth
         variant="contained"
@@ -686,6 +671,12 @@ export default function MainApp() {
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
               📱 Bulk Meter {user && `- ${user.name}`}
             </Typography>
+            <IconButton color="inherit" onClick={() => setShowEnvSwitcher(true)}>
+              <SettingsIcon />
+            </IconButton>
+            <IconButton color="inherit" onClick={() => setShowDebug(true)}>
+              <BugReportIcon />
+            </IconButton>
             {offline && <OfflineIcon />}
           </Toolbar>
         </AppBar>
@@ -720,7 +711,7 @@ export default function MainApp() {
           />
         </BottomNavigation>
 
-        {/* Sync Confirmation Dialog for Mobile Data */}
+        {/* Sync Confirmation Dialog */}
         <Dialog open={syncDialogOpen} onClose={() => setSyncDialogOpen(false)}>
           <DialogTitle>
             <Box display="flex" alignItems="center">
@@ -780,6 +771,32 @@ export default function MainApp() {
           <DialogActions>
             <Button onClick={resetDataUsage} color="error">Reset</Button>
             <Button onClick={() => setDataUsageDialogOpen(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Environment Switcher */}
+        {showEnvSwitcher && (
+          <EnvironmentSwitcher 
+            open={showEnvSwitcher} 
+            onClose={() => setShowEnvSwitcher(false)} 
+          />
+        )}
+
+        {/* Debug Dialog */}
+        <Dialog open={showDebug} onClose={() => setShowDebug(false)} maxWidth="md" fullWidth>
+          <DialogTitle>
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+              <Typography variant="h6">Debug Information</Typography>
+              <IconButton onClick={() => setShowDebug(false)}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <DebugScreen />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowDebug(false)}>Close</Button>
           </DialogActions>
         </Dialog>
 

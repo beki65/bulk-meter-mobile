@@ -1,13 +1,11 @@
 import axios from 'axios';
 
-// Use environment variable with fallback
-const API_URL = process.env.REACT_APP_API_URL || 'http://192.168.1.16:8000/api';
-
-console.log('🌐 Using API URL:', API_URL); // This will help debug
+// Use localhost for local development
+const API_URL = 'http://localhost:8000/api';
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: 30000, // Increased timeout to 30 seconds
   headers: {
     'Content-Type': 'application/json',
   },
@@ -30,6 +28,10 @@ api.interceptors.response.use(
   },
   (error) => {
     console.error('❌ API Error:', error.message);
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+    }
     return Promise.reject(error);
   }
 );
@@ -42,10 +44,10 @@ export const dmaAPI = {
 // Bulk Reading APIs
 export const bulkAPI = {
   sendReading: (data) => api.post('/bulk-readings', data),
-  getLatestReading: (dmaId, inletName) => 
-    api.get(`/bulk-readings/${dmaId}/${inletName}/latest`),
-  getReadingHistory: (dmaId, inletName, days = 30) => 
-    api.get(`/bulk-readings/${dmaId}/${inletName}/history?days=${days}`),
+  getLatestReading: (dmaId, pointName) => 
+    api.get(`/bulk-readings/${dmaId}/${pointName}/latest`),
+  getReadingHistory: (dmaId, pointName, days = 30) => 
+    api.get(`/bulk-readings/${dmaId}/${pointName}/history?days=${days}`),
 };
 
 // NRW Calculator API
