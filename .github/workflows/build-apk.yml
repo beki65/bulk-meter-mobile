@@ -13,10 +13,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Setup Node.js 16
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '16'
+          node-version: '18'
           
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -28,28 +28,33 @@ jobs:
         env:
           CI: false
           
-      - name: Setup Java 11
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '11'
+          java-version: '17'
           
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        
-      - name: Setup Capacitor 4
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+        # Skip the broken setup-android action, use built-in tools
+          
+      - name: Setup Capacitor
         run: |
+          # Install Capacitor 5
+          npm install @capacitor/cli@5 @capacitor/android@5 --legacy-peer-deps
+          
           # Create capacitor config
           cat > capacitor.config.json << 'EOF'
           {
             "appId": "com.beki65.bulkmeter",
             "appName": "Bulk Meter Test",
-            "webDir": "build"
+            "webDir": "build",
+            "bundledWebRuntime": false
           }
           EOF
-          
-          # Install Capacitor 4
-          npm install @capacitor/cli@4 @capacitor/android@4 --legacy-peer-deps
           
           # Add Android platform
           npx cap add android
@@ -61,6 +66,8 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
+          # Use Java 17 for gradle
+          export JAVA_HOME=$JAVA_HOME_17_X64
           ./gradlew assembleDebug
           
       - name: Upload APK
