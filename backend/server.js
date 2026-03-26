@@ -43,7 +43,10 @@ app.use((req, res, next) => {
   console.log(`📡 ${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
 });
-
+// Simple test endpoint
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'API is working!', timestamp: new Date().toISOString() });
+});
 // ============= DMA BOUNDARIES FROM QGIS =============
 
 // Jafar DMA Points - [latitude, longitude] format
@@ -297,6 +300,9 @@ app.get('/api/health', (req, res) => {
 });
 
 // Months endpoint
+// ============= CUSTOMER DATA ENDPOINTS =============
+
+// Get available months from customer data
 app.get('/api/months', async (req, res) => {
   try {
     const months = await Customer.aggregate([
@@ -314,50 +320,98 @@ app.get('/api/months', async (req, res) => {
     }));
     res.json(formatted);
   } catch (error) {
+    console.error('Error fetching months:', error);
     res.json([]);
   }
 });
 
-// Customers endpoint
+// Get customers by DMA with pagination
 app.get('/api/customers', async (req, res) => {
   try {
-    const { dmaId, month, year } = req.query;
-    let allCustomers = await Customer.find({});
+    const { dmaId, month, year, minConsumption, zeroConsumption, page = 1, limit = 50 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    console.log(`🔍 Query: dmaId=${dmaId}, month=${month}, year=${year}, page=${page}`);
+    
+    let allCustomers = await Customer.find({}).lean();
     let dmaCustomers = allCustomers.filter(c => determineDMA(c.latitude, c.longitude) === dmaId);
+    
+    let customersWithData = [];
+    let totalMonthConsumption = 0;
     
     if (month && year) {
       const monthNum = parseInt(month);
       const yearNum = parseInt(year);
-      dmaCustomers = dmaCustomers.filter(c => {
+      
+      customersWithData = dmaCustomers.filter(c => {
         const bill = c.billingHistory.find(b => b.month === monthNum && b.year === yearNum);
         if (bill) {
           c.currentConsumption = bill.consumption;
+          c.currentBill = bill.billAmount;
+          totalMonthConsumption += bill.consumption;
           return true;
         }
         return false;
       });
+    } else {
+      customersWithData = dmaCustomers;
     }
     
-    res.json({
-      customers: dmaCustomers.map(c => ({
+    let filtered = customersWithData;
+    if (minConsumption) {
+      const min = parseFloat(minConsumption);
+      filtered = filtered.filter(c => (c.currentConsumption || 0) >= min);
+    }
+    if (zeroConsumption === 'true') {
+      filtered = filtered.filter(c => (c.currentConsumption || 0) === 0);
+    }
+    
+    const totalCount = filtered.length;
+    const paginatedCustomers = filtered.slice(skip, skip + parseInt(limit));
+    const totalCustomers = filtered.length;
+    const zeroConsumptionCount = filtered.filter(c => (c.currentConsumption || 0) === 0).length;
+    const highConsumptionCount = filtered.filter(c => (c.currentConsumption || 0) > 100).length;
+    const avgConsumption = totalCustomers > 0 
+      ? filtered.reduce((sum, c) => sum + (c.currentConsumption || 0), 0) / totalCustomers 
+      : 0;
+    
+    const customersWithChanges = paginatedCustomers.map(c => {
+      const meterKeys = c.billingHistory.map(b => b.meterKey).filter(k => k);
+      const uniqueKeys = [...new Set(meterKeys)];
+      return {
         id: c.custKey,
         name: c.name,
         meterNumber: c.meterKey,
         currentConsumption: c.currentConsumption || 0,
-        status: 'active'
-      })),
+        currentBill: c.currentBill || 0,
+        status: 'active',
+        meterKeyChanged: uniqueKeys.length > 1,
+        meterKeys: uniqueKeys
+      };
+    });
+    
+    res.json({
+      customers: customersWithChanges,
       stats: {
-        totalCustomers: dmaCustomers.length,
-        zeroConsumption: 0,
-        highConsumption: 0,
-        averageConsumption: 0
+        totalCustomers,
+        zeroConsumption: zeroConsumptionCount,
+        highConsumption: highConsumptionCount,
+        averageConsumption: avgConsumption,
+        totalConsumption: totalMonthConsumption
+      },
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalCount / parseInt(limit)),
+        totalItems: totalCount,
+        itemsPerPage: parseInt(limit)
       }
     });
+    
   } catch (error) {
+    console.error('Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
-
 app.get('/api/dma/history', async (req, res) => {
   try {
     const getLatestReading = async (dmaId, pointName) => {
@@ -481,17 +535,6 @@ app.get('/api/test', (req, res) => { res.json({ status: 'OK', message: 'Backend 
 
 // ============= CUSTOMER DATA ENDPOINTS =============
 
-app.get('/api/months', async (req, res) => {
-  try {
-    const months = await Customer.aggregate([
-      { $unwind: '$billingHistory' },
-      { $group: { _id: { month: '$billingHistory.month', year: '$billingHistory.year' }, count: { $sum: 1 } } },
-      { $sort: { '_id.year': -1, '_id.month': -1 } }
-    ]);
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    res.json(months.map(m => ({ month: m._id.month, year: m._id.year, label: `${monthNames[m._id.month - 1]} ${m._id.year}`, count: m.count })));
-  } catch (error) { res.json([]); }
-});
 
 app.get('/api/customers', async (req, res) => {
   try {
