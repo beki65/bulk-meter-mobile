@@ -43,7 +43,11 @@ jobs:
             "appId": "com.beki65.bulkmeter",
             "appName": "Bulk Meter Mobile",
             "webDir": "build",
-            "bundledWebRuntime": false
+            "bundledWebRuntime": false,
+            "server": {
+              "url": "https://beki65.github.io/bulk-meter-mobile",
+              "androidScheme": "https"
+            }
           }
           EOF
           
@@ -64,3 +68,4 @@ jobs:
         with:
           name: Bulk-Meter-App
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
