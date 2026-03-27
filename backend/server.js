@@ -718,7 +718,1046 @@ app.get('/api/debug-mobile-readings', async (req, res) => {
     res.status(500).json({ error: error.message }); 
   }
 });
+// ============= WATER BALANCE SUMMARY FOR CUSTOM CALENDAR =============
 
+// Custom Calendar Periods (matching frontend)
+const CALENDAR_PERIODS = {
+  // 2025 Periods
+  '2025-january': {
+    id: '2025-january',
+    name: 'January 2025',
+    month: 'january',
+    year: 2025,
+    startDate: '2024-12-14',
+    endDate: '2025-01-13',
+    days: 31
+  },
+  '2025-february': {
+    id: '2025-february',
+    name: 'February 2025',
+    month: 'february',
+    year: 2025,
+    startDate: '2025-01-14',
+    endDate: '2025-02-12',
+    days: 30
+  },
+  '2025-march': {
+    id: '2025-march',
+    name: 'March 2025',
+    month: 'march',
+    year: 2025,
+    startDate: '2025-02-13',
+    endDate: '2025-03-14',
+    days: 30
+  },
+  '2025-april': {
+    id: '2025-april',
+    name: 'April 2025',
+    month: 'april',
+    year: 2025,
+    startDate: '2025-03-14',
+    endDate: '2025-04-13',
+    days: 31
+  },
+  '2025-may': {
+    id: '2025-may',
+    name: 'May 2025',
+    month: 'may',
+    year: 2025,
+    startDate: '2025-04-14',
+    endDate: '2025-05-13',
+    days: 30
+  },
+  '2025-june': {
+    id: '2025-june',
+    name: 'June 2025',
+    month: 'june',
+    year: 2025,
+    startDate: '2025-05-14',
+    endDate: '2025-06-12',
+    days: 30
+  },
+  '2025-july': {
+    id: '2025-july',
+    name: 'July 2025',
+    month: 'july',
+    year: 2025,
+    startDate: '2025-06-13',
+    endDate: '2025-07-12',
+    days: 30
+  },
+  '2025-august': {
+    id: '2025-august',
+    name: 'August 2025',
+    month: 'august',
+    year: 2025,
+    startDate: '2025-07-13',
+    endDate: '2025-08-11',
+    days: 30
+  },
+  '2025-september': {
+    id: '2025-september',
+    name: 'September 2025',
+    month: 'september',
+    year: 2025,
+    startDate: '2025-08-12',
+    endDate: '2025-09-13',
+    days: 33
+  },
+  '2025-october': {
+    id: '2025-october',
+    name: 'October 2025',
+    month: 'october',
+    year: 2025,
+    startDate: '2025-09-14',
+    endDate: '2025-10-15',
+    days: 32
+  },
+  '2025-november': {
+    id: '2025-november',
+    name: 'November 2025',
+    month: 'november',
+    year: 2025,
+    startDate: '2025-10-16',
+    endDate: '2025-11-14',
+    days: 30
+  },
+  '2025-december': {
+    id: '2025-december',
+    name: 'December 2025',
+    month: 'december',
+    year: 2025,
+    startDate: '2025-11-15',
+    endDate: '2025-12-14',
+    days: 30
+  },
+  // 2026 Periods
+  '2026-january': {
+    id: '2026-january',
+    name: 'January 2026',
+    month: 'january',
+    year: 2026,
+    startDate: '2025-12-15',
+    endDate: '2026-01-13',
+    days: 30
+  },
+  '2026-february': {
+    id: '2026-february',
+    name: 'February 2026',
+    month: 'february',
+    year: 2026,
+    startDate: '2026-01-14',
+    endDate: '2026-02-12',
+    days: 30
+  },
+  '2026-march': {
+    id: '2026-march',
+    name: 'March 2026',
+    month: 'march',
+    year: 2026,
+    startDate: '2026-02-13',
+    endDate: '2026-03-14',
+    days: 30
+  },
+  '2026-april': {
+    id: '2026-april',
+    name: 'April 2026',
+    month: 'april',
+    year: 2026,
+    startDate: '2026-03-14',
+    endDate: '2026-04-13',
+    days: 31
+  },
+  '2026-may': {
+    id: '2026-may',
+    name: 'May 2026',
+    month: 'may',
+    year: 2026,
+    startDate: '2026-04-14',
+    endDate: '2026-05-13',
+    days: 30
+  },
+  '2026-june': {
+    id: '2026-june',
+    name: 'June 2026',
+    month: 'june',
+    year: 2026,
+    startDate: '2026-05-14',
+    endDate: '2026-06-12',
+    days: 30
+  },
+  '2026-july': {
+    id: '2026-july',
+    name: 'July 2026',
+    month: 'july',
+    year: 2026,
+    startDate: '2026-06-13',
+    endDate: '2026-07-12',
+    days: 30
+  },
+  '2026-august': {
+    id: '2026-august',
+    name: 'August 2026',
+    month: 'august',
+    year: 2026,
+    startDate: '2026-07-13',
+    endDate: '2026-08-11',
+    days: 30
+  },
+  '2026-september': {
+    id: '2026-september',
+    name: 'September 2026',
+    month: 'september',
+    year: 2026,
+    startDate: '2026-08-12',
+    endDate: '2026-09-13',
+    days: 33
+  },
+  '2026-october': {
+    id: '2026-october',
+    name: 'October 2026',
+    month: 'october',
+    year: 2026,
+    startDate: '2026-09-14',
+    endDate: '2026-10-15',
+    days: 32
+  },
+  '2026-november': {
+    id: '2026-november',
+    name: 'November 2026',
+    month: 'november',
+    year: 2026,
+    startDate: '2026-10-16',
+    endDate: '2026-11-14',
+    days: 30
+  },
+  '2026-december': {
+    id: '2026-december',
+    name: 'December 2026',
+    month: 'december',
+    year: 2026,
+    startDate: '2026-11-15',
+    endDate: '2026-12-14',
+    days: 30
+  }
+};
+
+// Get available periods endpoint
+app.get('/api/available-periods', (req, res) => {
+  try {
+    const periods = Object.values(CALENDAR_PERIODS).map(period => ({
+      id: period.id,
+      label: `${period.name} (${formatShortDate(period.startDate)} - ${formatShortDate(period.endDate)})`,
+      name: period.name,
+      year: period.year,
+      month: period.month,
+      startDate: period.startDate,
+      endDate: period.endDate,
+      days: period.days
+    }));
+    
+    // Sort by year and month (most recent first)
+    periods.sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      const monthOrder = ['january', 'february', 'march', 'april', 'may', 'june', 
+                          'july', 'august', 'september', 'october', 'november', 'december'];
+      return monthOrder.indexOf(b.month) - monthOrder.indexOf(a.month);
+    });
+    
+    res.json({ periods });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Helper function to format dates for display
+function formatShortDate(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+// Debug endpoint to see all readings
+app.get('/api/debug-all-readings', async (req, res) => {
+  try {
+    const manualReadings = await ReadingHistory.find({}).sort({ readingDate: -1 }).limit(50).lean();
+    const mobileReadings = await Reading.find({}).sort({ timestamp: -1 }).limit(50).lean();
+    
+    res.json({
+      manualReadings: manualReadings.map(r => ({
+        id: r._id,
+        dmaId: r.dmaId,
+        pointName: r.pointName,
+        pointType: r.pointType,
+        readingValue: r.readingValue,
+        readingDate: r.readingDate,
+        source: 'manual'
+      })),
+      mobileReadings: mobileReadings.map(r => ({
+        id: r._id,
+        dmaId: r.dmaId,
+        pointName: r.pointName,
+        pointType: r.pointType,
+        readingValue: r.meterReading,
+        readingDate: r.timestamp,
+        source: 'mobile'
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// Water Balance Summary endpoint
+// ============= CORRECTED WATER BALANCE WITH CONSUMPTION CALCULATION =============
+
+// ============= FIXED WATER BALANCE WITH PROPER CONSUMPTION CALCULATION =============
+
+// ============= COMPLETE FIXED WATER BALANCE WITH MOBILE READINGS =============
+
+// ============= CORRECTED WATER BALANCE - FIND CLOSEST READINGS TO PERIOD BOUNDARIES =============
+
+// ============= SIMPLIFIED TEST FOR JAFAR DMA ONLY =============
+
+// ============= CORRECT WATER BALANCE WITH ACTUAL DATABASE DATA =============
+
+// ============= CORRECT WATER BALANCE - USING PERIOD BOUNDARY DATES =============
+
+app.get('/api/water-balance-summary', async (req, res) => {
+  console.log('\n💧 WATER BALANCE SUMMARY CALCULATION');
+  console.log('=' .repeat(60));
+  
+  try {
+    const { periodId } = req.query;
+    
+    if (!periodId) {
+      return res.status(400).json({ error: 'periodId is required' });
+    }
+    
+    // Define periods with exact boundary dates
+    const periods = {
+      '2026-march': {
+        name: 'March 2026',
+        startDate: new Date('2026-02-13'),
+        endDate: new Date('2026-03-14'),
+        days: 30
+      },
+      '2026-february': {
+        name: 'February 2026',
+        startDate: new Date('2026-01-14'),
+        endDate: new Date('2026-02-12'),
+        days: 30
+      },
+      '2026-january': {
+        name: 'January 2026',
+        startDate: new Date('2025-12-15'),
+        endDate: new Date('2026-01-13'),
+        days: 30
+      },
+      // 2025 periods
+      '2025-march': {
+        name: 'March 2025',
+        startDate: new Date('2025-02-13'),
+        endDate: new Date('2025-03-14'),
+        days: 30
+      }
+    };
+    
+    const period = periods[periodId];
+    if (!period) {
+      return res.status(404).json({ error: `Period ${periodId} not found` });
+    }
+    
+    console.log(`\n📅 Period: ${period.name}`);
+    console.log(`   Start Date: ${period.startDate.toISOString().split('T')[0]}`);
+    console.log(`   End Date: ${period.endDate.toISOString().split('T')[0]}`);
+    console.log(`   Days: ${period.days}\n`);
+    
+    // Get all DMAs
+    const dmaList = [
+      { id: 'DMA-JFR', name: 'Jafar DMA' },
+      { id: 'DMA-YKA', name: 'Yeka DMA' }
+    ];
+    
+    const results = [];
+    
+    for (const dma of dmaList) {
+      console.log(`\n${'='.repeat(50)}`);
+      console.log(`📍 DMA: ${dma.name} (${dma.id})`);
+      console.log(`${'='.repeat(50)}`);
+      
+      // Get all readings for this DMA
+      const manualReadings = await ReadingHistory.find({
+        dmaId: dma.id
+      }).lean();
+      
+      const mobileReadings = await Reading.find({
+        dmaId: dma.id
+      }).lean();
+      
+      // Combine all readings
+      const allReadings = [];
+      
+      manualReadings.forEach(r => {
+        allReadings.push({
+          value: r.readingValue,
+          date: new Date(r.readingDate),
+          source: 'manual',
+          pointType: r.pointType,
+          pointName: r.pointName
+        });
+      });
+      
+      mobileReadings.forEach(r => {
+        allReadings.push({
+          value: r.meterReading,
+          date: new Date(r.timestamp),
+          source: 'mobile',
+          pointType: r.pointType,
+          pointName: r.pointName
+        });
+      });
+      
+      // Group readings by point name and type
+      const pointReadings = {};
+      
+      allReadings.forEach(reading => {
+        const key = `${reading.pointType}_${reading.pointName}`;
+        if (!pointReadings[key]) {
+          pointReadings[key] = {
+            pointName: reading.pointName,
+            pointType: reading.pointType,
+            readings: []
+          };
+        }
+        pointReadings[key].readings.push({
+          value: reading.value,
+          date: reading.date,
+          source: reading.source
+        });
+      });
+      
+      // For each point, find readings exactly on or closest to period boundaries
+      const inletDifferences = [];
+      const outletDifferences = [];
+      
+      for (const [key, point] of Object.entries(pointReadings)) {
+        // Sort readings by date
+        point.readings.sort((a, b) => a.date - b.date);
+        
+        console.log(`\n  📍 ${point.pointType.toUpperCase()}: ${point.pointName}`);
+        console.log(`     Readings:`);
+        point.readings.forEach(r => {
+          console.log(`       ${r.source}: ${r.value.toLocaleString()} m³ on ${r.date.toISOString().split('T')[0]}`);
+        });
+        
+        // Find reading on or closest to START DATE
+        let startReading = null;
+        let startDiff = Infinity;
+        
+        for (const reading of point.readings) {
+          const diff = Math.abs(reading.date - period.startDate);
+          if (diff < startDiff) {
+            startDiff = diff;
+            startReading = reading;
+          }
+        }
+        
+        // Find reading on or closest to END DATE
+        let endReading = null;
+        let endDiff = Infinity;
+        
+        for (const reading of point.readings) {
+          const diff = Math.abs(reading.date - period.endDate);
+          if (diff < endDiff) {
+            endDiff = diff;
+            endReading = reading;
+          }
+        }
+        
+        if (startReading && endReading) {
+          // Calculate difference: End Reading - Start Reading
+          const difference = endReading.value - startReading.value;
+          const absDifference = Math.abs(difference);
+          
+          console.log(`\n     Calculation:`);
+          console.log(`       Start (${startReading.date.toISOString().split('T')[0]}): ${startReading.value.toLocaleString()} m³`);
+          console.log(`       End (${endReading.date.toISOString().split('T')[0]}): ${endReading.value.toLocaleString()} m³`);
+          console.log(`       Difference: ${difference.toLocaleString()} m³ (absolute: ${absDifference.toLocaleString()} m³)`);
+          
+          if (point.pointType === 'inlet') {
+            inletDifferences.push({
+              pointName: point.pointName,
+              startReading: {
+                value: startReading.value,
+                date: startReading.date,
+                source: startReading.source
+              },
+              endReading: {
+                value: endReading.value,
+                date: endReading.date,
+                source: endReading.source
+              },
+              difference: absDifference
+            });
+          } else if (point.pointType === 'outlet') {
+            outletDifferences.push({
+              pointName: point.pointName,
+              startReading: {
+                value: startReading.value,
+                date: startReading.date,
+                source: startReading.source
+              },
+              endReading: {
+                value: endReading.value,
+                date: endReading.date,
+                source: endReading.source
+              },
+              difference: absDifference
+            });
+          }
+        }
+      }
+      
+      // Calculate totals
+      const totalInlet = inletDifferences.reduce((sum, item) => sum + item.difference, 0);
+      const totalOutlet = outletDifferences.reduce((sum, item) => sum + item.difference, 0);
+      const systemInflow = totalInlet - totalOutlet;
+      
+      console.log(`\n  📊 SUMMARY:`);
+      console.log(`     Inlet Differences:`);
+      inletDifferences.forEach(item => {
+        console.log(`       ${item.pointName}: ${item.difference.toLocaleString()} m³`);
+      });
+      console.log(`     Total Inlet: ${totalInlet.toLocaleString()} m³`);
+      console.log(`     Total Outlet: ${totalOutlet.toLocaleString()} m³`);
+      console.log(`     System Inflow: ${systemInflow.toLocaleString()} m³`);
+      
+      results.push({
+        dmaId: dma.id,
+        dmaName: dma.name,
+        totalInlet: totalInlet,
+        totalOutlet: totalOutlet,
+        systemInflow: systemInflow,
+        period: {
+          name: period.name,
+          startDate: period.startDate,
+          endDate: period.endDate,
+          days: period.days
+        },
+        inletDetails: inletDifferences,
+        outletDetails: outletDifferences
+      });
+    }
+    
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`✅ WATER BALANCE CALCULATION COMPLETE`);
+    console.log(`${'='.repeat(60)}`);
+    
+    res.json({ dmas: results });
+    
+  } catch (error) {
+    console.error('Error in water-balance-summary:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+// Simple endpoint to test reading aggregation
+app.get('/api/test-water-balance', async (req, res) => {
+  try {
+    // Get all readings for March 2026 period
+    const periodStart = new Date('2026-02-13');
+    const periodEnd = new Date('2026-03-14');
+    
+    const allManualReadings = await ReadingHistory.find({
+      readingDate: { $gte: periodStart, $lte: periodEnd }
+    }).lean();
+    
+    const allMobileReadings = await Reading.find({
+      timestamp: { $gte: periodStart, $lte: periodEnd }
+    }).lean();
+    
+    res.json({
+      period: { start: periodStart, end: periodEnd },
+      manualReadingsCount: allManualReadings.length,
+      mobileReadingsCount: allMobileReadings.length,
+      manualReadings: allManualReadings,
+      mobileReadings: allMobileReadings.map(r => ({
+        dmaId: r.dmaId,
+        pointName: r.pointName,
+        pointType: r.pointType,
+        meterReading: r.meterReading,
+        timestamp: r.timestamp
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// Add this right before your app.listen
+// SIMPLIFIED TEST ENDPOINTS - Add these at the very end, right before app.listen
+
+// Test endpoint 1: Simple periods
+app.get('/api/test-periods', (req, res) => {
+  console.log('✅ Test periods endpoint called');
+  res.json({ 
+    message: 'Test endpoint working',
+    periods: [
+      { id: '2026-march', name: 'March 2026', startDate: '2026-02-13', endDate: '2026-03-14' }
+    ]
+  });
+});
+
+// Test endpoint 2: Direct database query for March 2026
+app.get('/api/test-march-readings', async (req, res) => {
+  try {
+    console.log('🔍 Querying readings for March 2026...');
+    
+    const periodStart = new Date('2026-02-13');
+    const periodEnd = new Date('2026-03-14');
+    
+    console.log(`Period: ${periodStart} to ${periodEnd}`);
+    
+    // Query manual readings
+    const manualReadings = await ReadingHistory.find({
+      readingDate: { 
+        $gte: periodStart, 
+        $lte: periodEnd 
+      }
+    }).lean();
+    
+    console.log(`Found ${manualReadings.length} manual readings`);
+    
+    // Query mobile readings
+    const mobileReadings = await Reading.find({
+      timestamp: { 
+        $gte: periodStart, 
+        $lte: periodEnd 
+      }
+    }).lean();
+    
+    console.log(`Found ${mobileReadings.length} mobile readings`);
+    
+    res.json({
+      success: true,
+      manualReadingsCount: manualReadings.length,
+      manualReadings: manualReadings,
+      mobileReadingsCount: mobileReadings.length,
+      mobileReadings: mobileReadings
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
+// Test endpoint 3: All readings (no date filter)
+app.get('/api/test-all-readings', async (req, res) => {
+  try {
+    const manualReadings = await ReadingHistory.find({}).limit(10).lean();
+    const mobileReadings = await Reading.find({}).limit(10).lean();
+    
+    res.json({
+      manualReadings: manualReadings,
+      mobileReadings: mobileReadings,
+      manualCount: await ReadingHistory.countDocuments(),
+      mobileCount: await Reading.countDocuments()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// Add this to your server.js and restart
+
+app.get('/api/debug-jafar', async (req, res) => {
+  try {
+    const manual = await ReadingHistory.find({ dmaId: 'DMA-JFR' }).lean();
+    const mobile = await Reading.find({ dmaId: 'DMA-JFR' }).lean();
+    
+    const allReadings = [
+      ...manual.map(r => ({
+        point: r.pointName,
+        type: r.pointType,
+        value: r.readingValue,
+        date: r.readingDate,
+        source: 'manual'
+      })),
+      ...mobile.map(r => ({
+        point: r.pointName,
+        type: r.pointType,
+        value: r.meterReading,
+        date: r.timestamp,
+        source: 'mobile'
+      }))
+    ];
+    
+    // Sort by date
+    allReadings.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    console.log('\n📊 JAFAR DMA ALL READINGS:');
+    allReadings.forEach(r => {
+      console.log(`${r.point} (${r.type}) | ${r.value} m³ | ${new Date(r.date).toISOString().split('T')[0]} | ${r.source}`);
+    });
+    
+    res.json({
+      total: allReadings.length,
+      readings: allReadings
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// Save manual reading - WITH DEBUG LOGS
+app.post('/api/reading-history', async (req, res) => {
+  console.log('\n📝 MANUAL READING SAVE REQUEST RECEIVED');
+  console.log('Request body:', req.body);
+  
+  try {
+    const { dmaId, pointName, pointType, readingDate, readingValue, meterId, notes } = req.body;
+    
+    // Validate required fields
+    if (!dmaId || !pointName || !pointType || !readingDate || readingValue === undefined) {
+      console.log('❌ Missing required fields:', { dmaId, pointName, pointType, readingDate, readingValue });
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    const newReading = new ReadingHistory({ 
+      dmaId, 
+      pointName, 
+      pointType, 
+      readingDate: new Date(readingDate), 
+      readingValue: parseFloat(readingValue), 
+      meterId, 
+      notes, 
+      source: 'manual' 
+    });
+    
+    await newReading.save();
+    
+    console.log('✅ Reading saved successfully:', newReading);
+    res.status(201).json(newReading);
+    
+  } catch (error) { 
+    console.error('❌ Error saving reading:', error);
+    res.status(500).json({ error: error.message }); 
+  }
+});
+// Add this to your server.js before app.listen
+
+app.get('/api/debug-jafar', async (req, res) => {
+  try {
+    const manual = await ReadingHistory.find({ dmaId: 'DMA-JFR' }).lean();
+    const mobile = await Reading.find({ dmaId: 'DMA-JFR' }).lean();
+    
+    const allReadings = [
+      ...manual.map(r => ({
+        point: r.pointName,
+        type: r.pointType,
+        value: r.readingValue,
+        date: r.readingDate,
+        source: 'manual'
+      })),
+      ...mobile.map(r => ({
+        point: r.pointName,
+        type: r.pointType,
+        value: r.meterReading,
+        date: r.timestamp,
+        source: 'mobile'
+      }))
+    ];
+    
+    allReadings.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    console.log('\n📊 JAFAR DMA READINGS:');
+    allReadings.forEach(r => {
+      console.log(`${r.point} (${r.type}) | ${r.value} m³ | ${new Date(r.date).toISOString().split('T')[0]} | ${r.source}`);
+    });
+    
+    res.json({
+      total: allReadings.length,
+      readings: allReadings
+    });
+    
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add the endpoint to add March 2026 readings
+app.post('/api/add-march-2026-readings', async (req, res) => {
+  console.log('\n📝 ADDING MARCH 2026 READINGS TO DATABASE');
+  
+  try {
+    // Delete existing readings for these dates to avoid duplicates
+    await ReadingHistory.deleteMany({
+      dmaId: 'DMA-JFR',
+      readingDate: {
+        $in: [
+          new Date('2026-02-13'),
+          new Date('2026-03-14')
+        ]
+      }
+    });
+    
+    // Add Bulk Didly readings
+    await ReadingHistory.create({
+      dmaId: 'DMA-JFR',
+      pointName: 'Bulk Didly',
+      pointType: 'inlet',
+      readingDate: new Date('2026-02-13'),
+      readingValue: 45,
+      source: 'manual',
+      notes: 'Period start reading - Feb 13'
+    });
+    
+    await ReadingHistory.create({
+      dmaId: 'DMA-JFR',
+      pointName: 'Bulk Didly',
+      pointType: 'inlet',
+      readingDate: new Date('2026-03-14'),
+      readingValue: 67,
+      source: 'manual',
+      notes: 'Period end reading - Mar 14'
+    });
+    
+    // Add Shemachoch readings
+    await ReadingHistory.create({
+      dmaId: 'DMA-JFR',
+      pointName: 'Shemachoch',
+      pointType: 'inlet',
+      readingDate: new Date('2026-02-13'),
+      readingValue: 10,
+      source: 'manual',
+      notes: 'Period start reading - Feb 13'
+    });
+    
+    await ReadingHistory.create({
+      dmaId: 'DMA-JFR',
+      pointName: 'Shemachoch',
+      pointType: 'inlet',
+      readingDate: new Date('2026-03-14'),
+      readingValue: 12,
+      source: 'manual',
+      notes: 'Period end reading - Mar 14'
+    });
+    
+    // Add Tel outlet readings
+    await ReadingHistory.create({
+      dmaId: 'DMA-JFR',
+      pointName: 'Tel',
+      pointType: 'outlet',
+      readingDate: new Date('2026-02-13'),
+      readingValue: 2,
+      source: 'manual',
+      notes: 'Period start reading - Feb 13'
+    });
+    
+    await ReadingHistory.create({
+      dmaId: 'DMA-JFR',
+      pointName: 'Tel',
+      pointType: 'outlet',
+      readingDate: new Date('2026-03-14'),
+      readingValue: 5,
+      source: 'manual',
+      notes: 'Period end reading - Mar 14'
+    });
+    
+    console.log('✅ March 2026 readings added successfully!');
+    
+    // Verify they were added
+    const verify = await ReadingHistory.find({
+      dmaId: 'DMA-JFR',
+      readingDate: {
+        $in: [
+          new Date('2026-02-13'),
+          new Date('2026-03-14')
+        ]
+      }
+    }).lean();
+    
+    console.log('📊 Verified readings in database:');
+    verify.forEach(r => {
+      console.log(`   ${r.pointName} (${r.pointType}): ${r.readingValue} m³ on ${r.readingDate.toISOString().split('T')[0]}`);
+    });
+    
+    res.json({ 
+      message: 'March 2026 readings added successfully!',
+      added: verify.length,
+      readings: verify
+    });
+    
+  } catch (error) {
+    console.error('Error adding readings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+// ============= WATER BALANCE SUMMARY ENDPOINT =============
+
+app.get('/api/water-balance-summary', async (req, res) => {
+  console.log('\n💧 WATER BALANCE SUMMARY CALLED');
+  console.log('Query params:', req.query);
+  
+  try {
+    const { periodId } = req.query;
+    
+    if (!periodId) {
+      return res.status(400).json({ error: 'periodId is required' });
+    }
+    
+    // Define periods
+    const periods = {
+      '2026-march': {
+        name: 'March 2026',
+        startDate: new Date('2026-02-13'),
+        endDate: new Date('2026-03-14'),
+        days: 30
+      },
+      '2026-february': {
+        name: 'February 2026',
+        startDate: new Date('2026-01-14'),
+        endDate: new Date('2026-02-12'),
+        days: 30
+      },
+      '2026-january': {
+        name: 'January 2026',
+        startDate: new Date('2025-12-15'),
+        endDate: new Date('2026-01-13'),
+        days: 30
+      }
+    };
+    
+    const period = periods[periodId];
+    if (!period) {
+      return res.status(404).json({ error: `Period ${periodId} not found` });
+    }
+    
+    console.log(`Period: ${period.name}`);
+    console.log(`Start: ${period.startDate.toISOString().split('T')[0]}`);
+    console.log(`End: ${period.endDate.toISOString().split('T')[0]}`);
+    
+    // Get all readings for DMA-JFR from both collections
+    const manualReadings = await ReadingHistory.find({ dmaId: 'DMA-JFR' }).lean();
+    const mobileReadings = await Reading.find({ dmaId: 'DMA-JFR' }).lean();
+    
+    // Combine readings
+    const allReadings = [
+      ...manualReadings.map(r => ({
+        pointName: r.pointName,
+        pointType: r.pointType,
+        value: r.readingValue,
+        date: new Date(r.readingDate),
+        source: 'manual'
+      })),
+      ...mobileReadings.map(r => ({
+        pointName: r.pointName,
+        pointType: r.pointType,
+        value: r.meterReading,
+        date: new Date(r.timestamp),
+        source: 'mobile'
+      }))
+    ];
+    
+    console.log(`Total readings found: ${allReadings.length}`);
+    
+    // Group by point name
+    const points = {
+      'Bulk Didly': { type: 'inlet', readings: [] },
+      'Shemachoch': { type: 'inlet', readings: [] },
+      'Tel': { type: 'outlet', readings: [] }
+    };
+    
+    allReadings.forEach(r => {
+      if (points[r.pointName]) {
+        points[r.pointName].readings.push({
+          value: r.value,
+          date: r.date,
+          source: r.source
+        });
+      }
+    });
+    
+    // Sort readings by date
+    Object.keys(points).forEach(key => {
+      points[key].readings.sort((a, b) => a.date - b.date);
+    });
+    
+    // Find closest reading to a date
+    const findClosest = (readings, targetDate) => {
+      if (!readings.length) return null;
+      let closest = readings[0];
+      let minDiff = Math.abs(closest.date - targetDate);
+      
+      for (let i = 1; i < readings.length; i++) {
+        const diff = Math.abs(readings[i].date - targetDate);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = readings[i];
+        }
+      }
+      return closest;
+    };
+    
+    const inletResults = [];
+    const outletResults = [];
+    
+    // Calculate for each point
+    for (const [pointName, pointData] of Object.entries(points)) {
+      console.log(`\nProcessing ${pointName} (${pointData.type}):`);
+      pointData.readings.forEach(r => {
+        console.log(`  ${r.source}: ${r.value} on ${r.date.toISOString().split('T')[0]}`);
+      });
+      
+      const startReading = findClosest(pointData.readings, period.startDate);
+      const endReading = findClosest(pointData.readings, period.endDate);
+      
+      if (startReading && endReading) {
+        let difference = Math.abs(endReading.value - startReading.value);
+        
+        console.log(`  Start: ${startReading.value} on ${startReading.date.toISOString().split('T')[0]}`);
+        console.log(`  End: ${endReading.value} on ${endReading.date.toISOString().split('T')[0]}`);
+        console.log(`  Difference: ${difference} m³`);
+        
+        if (pointData.type === 'inlet') {
+          inletResults.push({ pointName, difference });
+        } else {
+          outletResults.push({ pointName, difference });
+        }
+      } else {
+        console.log(`  ⚠️ Missing readings for ${pointName}`);
+      }
+    }
+    
+    const totalInlet = inletResults.reduce((sum, i) => sum + i.difference, 0);
+    const totalOutlet = outletResults.reduce((sum, i) => sum + i.difference, 0);
+    const systemInflow = totalInlet - totalOutlet;
+    
+    console.log(`\n📊 RESULTS:`);
+    console.log(`Total Inlet: ${totalInlet} m³`);
+    console.log(`Total Outlet: ${totalOutlet} m³`);
+    console.log(`System Inflow: ${systemInflow} m³`);
+    
+    res.json({
+      dmas: [{
+        dmaId: 'DMA-JFR',
+        dmaName: 'Jafar DMA',
+        totalInlet: totalInlet,
+        totalOutlet: totalOutlet,
+        systemInflow: systemInflow,
+        period: {
+          name: period.name,
+          startDate: period.startDate,
+          endDate: period.endDate,
+          days: period.days
+        },
+        inletDetails: inletResults,
+        outletDetails: outletResults
+      }]
+    });
+    
+  } catch (error) {
+    console.error('Error in water-balance-summary:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
 // ============= START SERVER =============
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, '0.0.0.0', () => {
