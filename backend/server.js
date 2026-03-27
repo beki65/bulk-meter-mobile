@@ -1021,9 +1021,11 @@ app.get('/api/debug-all-readings', async (req, res) => {
 
 // ============= CORRECT WATER BALANCE - USING PERIOD BOUNDARY DATES =============
 
+// ============= WATER BALANCE SUMMARY ENDPOINT =============
+
 app.get('/api/water-balance-summary', async (req, res) => {
-  console.log('\n💧 WATER BALANCE SUMMARY CALCULATION');
-  console.log('=' .repeat(60));
+  console.log('\n💧 WATER BALANCE SUMMARY CALLED');
+  console.log('Query params:', req.query);
   
   try {
     const { periodId } = req.query;
@@ -1032,44 +1034,191 @@ app.get('/api/water-balance-summary', async (req, res) => {
       return res.status(400).json({ error: 'periodId is required' });
     }
     
-    // Define periods with exact boundary dates
-    const periods = {
-      '2026-march': {
-        name: 'March 2026',
-        startDate: new Date('2026-02-13'),
-        endDate: new Date('2026-03-14'),
+    // COMPLETE CALENDAR PERIODS FOR 2025-2026
+    const CALENDAR_PERIODS = {
+      // 2025 Periods
+      '2025-january': {
+        id: '2025-january',
+        name: 'January 2025',
+        startDate: new Date('2024-12-14'),
+        endDate: new Date('2025-01-13'),
+        days: 31
+      },
+      '2025-february': {
+        id: '2025-february',
+        name: 'February 2025',
+        startDate: new Date('2025-01-14'),
+        endDate: new Date('2025-02-12'),
         days: 30
       },
-      '2026-february': {
-        name: 'February 2026',
-        startDate: new Date('2026-01-14'),
-        endDate: new Date('2026-02-12'),
+      '2025-march': {
+        id: '2025-march',
+        name: 'March 2025',
+        startDate: new Date('2025-02-13'),
+        endDate: new Date('2025-03-14'),
         days: 30
       },
+      '2025-april': {
+        id: '2025-april',
+        name: 'April 2025',
+        startDate: new Date('2025-03-14'),
+        endDate: new Date('2025-04-13'),
+        days: 31
+      },
+      '2025-may': {
+        id: '2025-may',
+        name: 'May 2025',
+        startDate: new Date('2025-04-14'),
+        endDate: new Date('2025-05-13'),
+        days: 30
+      },
+      '2025-june': {
+        id: '2025-june',
+        name: 'June 2025',
+        startDate: new Date('2025-05-14'),
+        endDate: new Date('2025-06-12'),
+        days: 30
+      },
+      '2025-july': {
+        id: '2025-july',
+        name: 'July 2025',
+        startDate: new Date('2025-06-13'),
+        endDate: new Date('2025-07-12'),
+        days: 30
+      },
+      '2025-august': {
+        id: '2025-august',
+        name: 'August 2025',
+        startDate: new Date('2025-07-13'),
+        endDate: new Date('2025-08-11'),
+        days: 30
+      },
+      '2025-september': {
+        id: '2025-september',
+        name: 'September 2025',
+        startDate: new Date('2025-08-12'),
+        endDate: new Date('2025-09-13'),
+        days: 33
+      },
+      '2025-october': {
+        id: '2025-october',
+        name: 'October 2025',
+        startDate: new Date('2025-09-14'),
+        endDate: new Date('2025-10-15'),
+        days: 32
+      },
+      '2025-november': {
+        id: '2025-november',
+        name: 'November 2025',
+        startDate: new Date('2025-10-16'),
+        endDate: new Date('2025-11-14'),
+        days: 30
+      },
+      '2025-december': {
+        id: '2025-december',
+        name: 'December 2025',
+        startDate: new Date('2025-11-15'),
+        endDate: new Date('2025-12-14'),
+        days: 30
+      },
+      // 2026 Periods
       '2026-january': {
+        id: '2026-january',
         name: 'January 2026',
         startDate: new Date('2025-12-15'),
         endDate: new Date('2026-01-13'),
         days: 30
       },
-      // 2025 periods
-      '2025-march': {
-        name: 'March 2025',
-        startDate: new Date('2025-02-13'),
-        endDate: new Date('2025-03-14'),
+      '2026-february': {
+        id: '2026-february',
+        name: 'February 2026',
+        startDate: new Date('2026-01-14'),
+        endDate: new Date('2026-02-12'),
+        days: 30
+      },
+      '2026-march': {
+        id: '2026-march',
+        name: 'March 2026',
+        startDate: new Date('2026-02-13'),
+        endDate: new Date('2026-03-14'),
+        days: 30
+      },
+      '2026-april': {
+        id: '2026-april',
+        name: 'April 2026',
+        startDate: new Date('2026-03-14'),
+        endDate: new Date('2026-04-13'),
+        days: 31
+      },
+      '2026-may': {
+        id: '2026-may',
+        name: 'May 2026',
+        startDate: new Date('2026-04-14'),
+        endDate: new Date('2026-05-13'),
+        days: 30
+      },
+      '2026-june': {
+        id: '2026-june',
+        name: 'June 2026',
+        startDate: new Date('2026-05-14'),
+        endDate: new Date('2026-06-12'),
+        days: 30
+      },
+      '2026-july': {
+        id: '2026-july',
+        name: 'July 2026',
+        startDate: new Date('2026-06-13'),
+        endDate: new Date('2026-07-12'),
+        days: 30
+      },
+      '2026-august': {
+        id: '2026-august',
+        name: 'August 2026',
+        startDate: new Date('2026-07-13'),
+        endDate: new Date('2026-08-11'),
+        days: 30
+      },
+      '2026-september': {
+        id: '2026-september',
+        name: 'September 2026',
+        startDate: new Date('2026-08-12'),
+        endDate: new Date('2026-09-13'),
+        days: 33
+      },
+      '2026-october': {
+        id: '2026-october',
+        name: 'October 2026',
+        startDate: new Date('2026-09-14'),
+        endDate: new Date('2026-10-15'),
+        days: 32
+      },
+      '2026-november': {
+        id: '2026-november',
+        name: 'November 2026',
+        startDate: new Date('2026-10-16'),
+        endDate: new Date('2026-11-14'),
+        days: 30
+      },
+      '2026-december': {
+        id: '2026-december',
+        name: 'December 2026',
+        startDate: new Date('2026-11-15'),
+        endDate: new Date('2026-12-14'),
         days: 30
       }
     };
     
-    const period = periods[periodId];
+    const period = CALENDAR_PERIODS[periodId];
     if (!period) {
       return res.status(404).json({ error: `Period ${periodId} not found` });
     }
     
-    console.log(`\n📅 Period: ${period.name}`);
-    console.log(`   Start Date: ${period.startDate.toISOString().split('T')[0]}`);
-    console.log(`   End Date: ${period.endDate.toISOString().split('T')[0]}`);
-    console.log(`   Days: ${period.days}\n`);
+    console.log(`Period: ${period.name}`);
+    console.log(`Start: ${period.startDate.toISOString().split('T')[0]}`);
+    console.log(`End: ${period.endDate.toISOString().split('T')[0]}`);
+    
+    // ... REST OF YOUR EXISTING CODE CONTINUES ...
+    // (Keep all the reading fetching and calculation code after this)
     
     // Get all DMAs
     const dmaList = [
