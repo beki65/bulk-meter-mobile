@@ -1213,176 +1213,193 @@ app.get('/api/water-balance-summary', async (req, res) => {
       return res.status(404).json({ error: `Period ${periodId} not found` });
     }
     
-    console.log(`Period: ${period.name}`);
-    console.log(`Start: ${period.startDate.toISOString().split('T')[0]}`);
-    console.log(`End: ${period.endDate.toISOString().split('T')[0]}`);
+    console.log(`\n📅 Period: ${period.name}`);
+    console.log(`   Start: ${period.startDate.toISOString().split('T')[0]}`);
+    console.log(`   End: ${period.endDate.toISOString().split('T')[0]}`);
+    console.log(`   Days: ${period.days}\n`);
     
-    // ... REST OF YOUR EXISTING CODE CONTINUES ...
-    // (Keep all the reading fetching and calculation code after this)
+    // Get readings
+    const manualReadings = await ReadingHistory.find({ dmaId: 'DMA-JFR' }).lean();
+    const mobileReadings = await Reading.find({ dmaId: 'DMA-JFR' }).lean();
     
-    // Get all DMAs
-    const dmaList = [
-      { id: 'DMA-JFR', name: 'Jafar DMA' },
-      { id: 'DMA-YKA', name: 'Yeka DMA' }
+    // Combine readings
+    const allReadings = [
+      ...manualReadings.map(r => ({
+        pointName: r.pointName,
+        pointType: r.pointType,
+        value: r.readingValue,
+        date: new Date(r.readingDate),
+        source: 'manual'
+      })),
+      ...mobileReadings.map(r => ({
+        pointName: r.pointName,
+        pointType: r.pointType,
+        value: r.meterReading,
+        date: new Date(r.timestamp),
+        source: 'mobile'
+      }))
     ];
     
-    const results = [];
+    // Group by point name
+    const points = {
+      'Bulk Didly': { type: 'inlet', readings: [] },
+      'Shemachoch': { type: 'inlet', readings: [] },
+      'Tel': { type: 'outlet', readings: [] }
+    };
     
-    for (const dma of dmaList) {
-      console.log(`\n${'='.repeat(50)}`);
-      console.log(`📍 DMA: ${dma.name} (${dma.id})`);
-      console.log(`${'='.repeat(50)}`);
-      
-      // Get all readings for this DMA
-      const manualReadings = await ReadingHistory.find({
-        dmaId: dma.id
-      }).lean();
-      
-      const mobileReadings = await Reading.find({
-        dmaId: dma.id
-      }).lean();
-      
-      // Combine all readings
-      const allReadings = [];
-      
-      manualReadings.forEach(r => {
-        allReadings.push({
-          value: r.readingValue,
-          date: new Date(r.readingDate),
-          source: 'manual',
-          pointType: r.pointType,
-          pointName: r.pointName
+    allReadings.forEach(r => {
+      if (points[r.pointName]) {
+        points[r.pointName].readings.push({
+          value: r.value,
+          date: r.date,
+          source: r.source
         });
-      });
+      }
+    });
+    
+    // Sort readings by date
+    Object.keys(points).forEach(key => {
+      points[key].readings.sort((a, b) => a.date - b.date);
+    });
+    
+    // Helper function to find reading within ±4 days
+    const findReadingForDate = (readings, targetDate) => {
+      if (!readings.length) return null;
       
-      mobileReadings.forEach(r => {
-        allReadings.push({
-          value: r.meterReading,
-          date: new Date(r.timestamp),
-          source: 'mobile',
-          pointType: r.pointType,
-          pointName: r.pointName
-        });
-      });
+      // Check for exact match first
+      const exactMatch = readings.find(r => 
+        r.date.toISOString().split('T')[0] === targetDate.toISOString().split('T')[0]
+      );
       
-      // Group readings by point name and type
-      const pointReadings = {};
+      if (exactMatch) {
+        return {
+          reading: exactMatch,
+          daysDiff: 0,
+          isExact: true
+        };
+      }
       
-      allReadings.forEach(reading => {
-        const key = `${reading.pointType}_${reading.pointName}`;
-        if (!pointReadings[key]) {
-          pointReadings[key] = {
-            pointName: reading.pointName,
-            pointType: reading.pointType,
-            readings: []
-          };
-        }
-        pointReadings[key].readings.push({
-          value: reading.value,
-          date: reading.date,
-          source: reading.source
-        });
-      });
+      // Look for readings within ±4 days
+      let closest = null;
+      let minDiff = Infinity;
       
-      // For each point, find readings exactly on or closest to period boundaries
-      const inletDifferences = [];
-      const outletDifferences = [];
-      
-      for (const [key, point] of Object.entries(pointReadings)) {
-        // Sort readings by date
-        point.readings.sort((a, b) => a.date - b.date);
-        
-        console.log(`\n  📍 ${point.pointType.toUpperCase()}: ${point.pointName}`);
-        console.log(`     Readings:`);
-        point.readings.forEach(r => {
-          console.log(`       ${r.source}: ${r.value.toLocaleString()} m³ on ${r.date.toISOString().split('T')[0]}`);
-        });
-        
-        // Find reading on or closest to START DATE
-        let startReading = null;
-        let startDiff = Infinity;
-        
-        for (const reading of point.readings) {
-          const diff = Math.abs(reading.date - period.startDate);
-          if (diff < startDiff) {
-            startDiff = diff;
-            startReading = reading;
-          }
-        }
-        
-        // Find reading on or closest to END DATE
-        let endReading = null;
-        let endDiff = Infinity;
-        
-        for (const reading of point.readings) {
-          const diff = Math.abs(reading.date - period.endDate);
-          if (diff < endDiff) {
-            endDiff = diff;
-            endReading = reading;
-          }
-        }
-        
-        if (startReading && endReading) {
-          // Calculate difference: End Reading - Start Reading
-          const difference = endReading.value - startReading.value;
-          const absDifference = Math.abs(difference);
-          
-          console.log(`\n     Calculation:`);
-          console.log(`       Start (${startReading.date.toISOString().split('T')[0]}): ${startReading.value.toLocaleString()} m³`);
-          console.log(`       End (${endReading.date.toISOString().split('T')[0]}): ${endReading.value.toLocaleString()} m³`);
-          console.log(`       Difference: ${difference.toLocaleString()} m³ (absolute: ${absDifference.toLocaleString()} m³)`);
-          
-          if (point.pointType === 'inlet') {
-            inletDifferences.push({
-              pointName: point.pointName,
-              startReading: {
-                value: startReading.value,
-                date: startReading.date,
-                source: startReading.source
-              },
-              endReading: {
-                value: endReading.value,
-                date: endReading.date,
-                source: endReading.source
-              },
-              difference: absDifference
-            });
-          } else if (point.pointType === 'outlet') {
-            outletDifferences.push({
-              pointName: point.pointName,
-              startReading: {
-                value: startReading.value,
-                date: startReading.date,
-                source: startReading.source
-              },
-              endReading: {
-                value: endReading.value,
-                date: endReading.date,
-                source: endReading.source
-              },
-              difference: absDifference
-            });
-          }
+      for (const reading of readings) {
+        const diffDays = Math.abs(reading.date - targetDate) / (1000 * 60 * 60 * 24);
+        if (diffDays <= 4 && diffDays < minDiff) {
+          minDiff = diffDays;
+          closest = reading;
         }
       }
       
-      // Calculate totals
-      const totalInlet = inletDifferences.reduce((sum, item) => sum + item.difference, 0);
-      const totalOutlet = outletDifferences.reduce((sum, item) => sum + item.difference, 0);
-      const systemInflow = totalInlet - totalOutlet;
+      if (closest) {
+        return {
+          reading: closest,
+          daysDiff: minDiff,
+          isExact: false
+        };
+      }
       
-      console.log(`\n  📊 SUMMARY:`);
-      console.log(`     Inlet Differences:`);
-      inletDifferences.forEach(item => {
-        console.log(`       ${item.pointName}: ${item.difference.toLocaleString()} m³`);
+      return null;
+    };
+    
+    const inletResults = [];
+    const outletResults = [];
+    
+    // Calculate for each point
+    for (const [pointName, pointData] of Object.entries(points)) {
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`📍 ${pointName} (${pointData.type})`);
+      console.log(`${'='.repeat(60)}`);
+      
+      pointData.readings.forEach(r => {
+        console.log(`   ${r.source}: ${r.value.toLocaleString()} m³ on ${r.date.toISOString().split('T')[0]}`);
       });
-      console.log(`     Total Inlet: ${totalInlet.toLocaleString()} m³`);
-      console.log(`     Total Outlet: ${totalOutlet.toLocaleString()} m³`);
-      console.log(`     System Inflow: ${systemInflow.toLocaleString()} m³`);
       
-      results.push({
-        dmaId: dma.id,
-        dmaName: dma.name,
+      // Find readings for start and end dates
+      const startResult = findReadingForDate(pointData.readings, period.startDate);
+      const endResult = findReadingForDate(pointData.readings, period.endDate);
+      
+      // If either reading is missing, skip this point
+      if (!startResult) {
+        console.log(`   ❌ NO READING within ±4 days of start: ${period.startDate.toISOString().split('T')[0]}`);
+        continue;
+      }
+      
+      if (!endResult) {
+        console.log(`   ❌ NO READING within ±4 days of end: ${period.endDate.toISOString().split('T')[0]}`);
+        continue;
+      }
+      
+      const startReading = startResult.reading;
+      const endReading = endResult.reading;
+      
+      console.log(`\n   START: ${startReading.value} m³ on ${startReading.date.toISOString().split('T')[0]} (${startResult.isExact ? 'EXACT' : `${startResult.daysDiff.toFixed(1)} days away`})`);
+      console.log(`   END: ${endReading.value} m³ on ${endReading.date.toISOString().split('T')[0]} (${endResult.isExact ? 'EXACT' : `${endResult.daysDiff.toFixed(1)} days away`})`);
+      
+      // Calculate consumption
+      const rawConsumption = endReading.value - startReading.value;
+      const absConsumption = Math.abs(rawConsumption);
+      const actualDays = (endReading.date - startReading.date) / (1000 * 60 * 60 * 24);
+      
+      let finalConsumption = absConsumption;
+      let isProRated = false;
+      let dailyRate = 0;
+      
+      // Apply pro-ration if readings are not exact
+      if (!startResult.isExact || !endResult.isExact) {
+        isProRated = true;
+        dailyRate = absConsumption / actualDays;
+        finalConsumption = dailyRate * period.days;
+        
+        console.log(`\n   PRO-RATED: ${absConsumption} m³ over ${actualDays.toFixed(1)} days = ${dailyRate.toFixed(2)} m³/day × ${period.days} days = ${finalConsumption.toFixed(0)} m³`);
+      } else {
+        console.log(`\n   EXACT: ${finalConsumption} m³`);
+      }
+      
+      const result = {
+        pointName: pointName,
+        startReading: {
+          value: startReading.value,
+          date: startReading.date,
+          source: startReading.source,
+          isExact: startResult.isExact,
+          daysFromTarget: startResult.isExact ? 0 : startResult.daysDiff
+        },
+        endReading: {
+          value: endReading.value,
+          date: endReading.date,
+          source: endReading.source,
+          isExact: endResult.isExact,
+          daysFromTarget: endResult.isExact ? 0 : endResult.daysDiff
+        },
+        consumption: finalConsumption,
+        isProRated: isProRated,
+        actualDays: actualDays.toFixed(1),
+        dailyRate: dailyRate.toFixed(2)
+      };
+      
+      if (pointData.type === 'inlet') {
+        inletResults.push(result);
+      } else {
+        outletResults.push(result);
+      }
+    }
+    
+    // Calculate totals
+    const totalInlet = inletResults.reduce((sum, i) => sum + i.consumption, 0);
+    const totalOutlet = outletResults.reduce((sum, i) => sum + i.consumption, 0);
+    const systemInflow = totalInlet - totalOutlet;
+    
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`📊 RESULTS FOR ${period.name}:`);
+    console.log(`   Total Inlet: ${totalInlet.toFixed(0).toLocaleString()} m³`);
+    console.log(`   Total Outlet: ${totalOutlet.toFixed(0).toLocaleString()} m³`);
+    console.log(`   System Inflow: ${systemInflow.toFixed(0).toLocaleString()} m³`);
+    
+    res.json({
+      dmas: [{
+        dmaId: 'DMA-JFR',
+        dmaName: 'Jafar DMA',
         totalInlet: totalInlet,
         totalOutlet: totalOutlet,
         systemInflow: systemInflow,
@@ -1392,22 +1409,15 @@ app.get('/api/water-balance-summary', async (req, res) => {
           endDate: period.endDate,
           days: period.days
         },
-        inletDetails: inletDifferences,
-        outletDetails: outletDifferences
-      });
-    }
-    
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`✅ WATER BALANCE CALCULATION COMPLETE`);
-    console.log(`${'='.repeat(60)}`);
-    
-    res.json({ dmas: results });
+        inletDetails: inletResults,
+        outletDetails: outletResults
+      }]
+    });
     
   } catch (error) {
-    console.error('Error in water-balance-summary:', error);
-    res.status(500).json({ error: error.message, stack: error.stack });
+    console.error('Error:', error);
+    res.status(500).json({ error: error.message });
   }
-});
 // Simple endpoint to test reading aggregation
 app.get('/api/test-water-balance', async (req, res) => {
   try {
