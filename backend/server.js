@@ -405,7 +405,17 @@ app.post('/api/bulk-readings', async (req, res) => {
     res.status(500).json({ error: 'Failed to save reading' });
   }
 });
-
+app.get('/api/mongo-readings', async (req, res) => {
+  try {
+    const readings = await Reading.find().sort({ timestamp: -1 }).limit(10);
+    res.json({
+      total: readings.length,
+      readings: readings
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // Bulk Readings - Get by DMA
 app.get('/api/bulk-readings/:dmaId', (req, res) => {
   const { dmaId } = req.params;
