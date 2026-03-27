@@ -1752,38 +1752,191 @@ app.get('/api/water-balance-summary', async (req, res) => {
       return res.status(400).json({ error: 'periodId is required' });
     }
     
-    // Define periods
-    const periods = {
-      '2026-march': {
-        name: 'March 2026',
-        startDate: new Date('2026-02-13'),
-        endDate: new Date('2026-03-14'),
+    // Complete calendar periods for 2025-2026
+    const CALENDAR_PERIODS = {
+      // 2025 Periods
+      '2025-january': {
+        id: '2025-january',
+        name: 'January 2025',
+        startDate: new Date('2024-12-14'),
+        endDate: new Date('2025-01-13'),
+        days: 31
+      },
+      '2025-february': {
+        id: '2025-february',
+        name: 'February 2025',
+        startDate: new Date('2025-01-14'),
+        endDate: new Date('2025-02-12'),
+        days: 30
+      },
+      '2025-march': {
+        id: '2025-march',
+        name: 'March 2025',
+        startDate: new Date('2025-02-13'),
+        endDate: new Date('2025-03-14'),
+        days: 30
+      },
+      '2025-april': {
+        id: '2025-april',
+        name: 'April 2025',
+        startDate: new Date('2025-03-14'),
+        endDate: new Date('2025-04-13'),
+        days: 31
+      },
+      '2025-may': {
+        id: '2025-may',
+        name: 'May 2025',
+        startDate: new Date('2025-04-14'),
+        endDate: new Date('2025-05-13'),
+        days: 30
+      },
+      '2025-june': {
+        id: '2025-june',
+        name: 'June 2025',
+        startDate: new Date('2025-05-14'),
+        endDate: new Date('2025-06-12'),
+        days: 30
+      },
+      '2025-july': {
+        id: '2025-july',
+        name: 'July 2025',
+        startDate: new Date('2025-06-13'),
+        endDate: new Date('2025-07-12'),
+        days: 30
+      },
+      '2025-august': {
+        id: '2025-august',
+        name: 'August 2025',
+        startDate: new Date('2025-07-13'),
+        endDate: new Date('2025-08-11'),
+        days: 30
+      },
+      '2025-september': {
+        id: '2025-september',
+        name: 'September 2025',
+        startDate: new Date('2025-08-12'),
+        endDate: new Date('2025-09-13'),
+        days: 33
+      },
+      '2025-october': {
+        id: '2025-october',
+        name: 'October 2025',
+        startDate: new Date('2025-09-14'),
+        endDate: new Date('2025-10-15'),
+        days: 32
+      },
+      '2025-november': {
+        id: '2025-november',
+        name: 'November 2025',
+        startDate: new Date('2025-10-16'),
+        endDate: new Date('2025-11-14'),
+        days: 30
+      },
+      '2025-december': {
+        id: '2025-december',
+        name: 'December 2025',
+        startDate: new Date('2025-11-15'),
+        endDate: new Date('2025-12-14'),
+        days: 30
+      },
+      // 2026 Periods
+      '2026-january': {
+        id: '2026-january',
+        name: 'January 2026',
+        startDate: new Date('2025-12-15'),
+        endDate: new Date('2026-01-13'),
         days: 30
       },
       '2026-february': {
+        id: '2026-february',
         name: 'February 2026',
         startDate: new Date('2026-01-14'),
         endDate: new Date('2026-02-12'),
         days: 30
       },
-      '2026-january': {
-        name: 'January 2026',
-        startDate: new Date('2025-12-15'),
-        endDate: new Date('2026-01-13'),
+      '2026-march': {
+        id: '2026-march',
+        name: 'March 2026',
+        startDate: new Date('2026-02-13'),
+        endDate: new Date('2026-03-14'),
+        days: 30
+      },
+      '2026-april': {
+        id: '2026-april',
+        name: 'April 2026',
+        startDate: new Date('2026-03-14'),
+        endDate: new Date('2026-04-13'),
+        days: 31
+      },
+      '2026-may': {
+        id: '2026-may',
+        name: 'May 2026',
+        startDate: new Date('2026-04-14'),
+        endDate: new Date('2026-05-13'),
+        days: 30
+      },
+      '2026-june': {
+        id: '2026-june',
+        name: 'June 2026',
+        startDate: new Date('2026-05-14'),
+        endDate: new Date('2026-06-12'),
+        days: 30
+      },
+      '2026-july': {
+        id: '2026-july',
+        name: 'July 2026',
+        startDate: new Date('2026-06-13'),
+        endDate: new Date('2026-07-12'),
+        days: 30
+      },
+      '2026-august': {
+        id: '2026-august',
+        name: 'August 2026',
+        startDate: new Date('2026-07-13'),
+        endDate: new Date('2026-08-11'),
+        days: 30
+      },
+      '2026-september': {
+        id: '2026-september',
+        name: 'September 2026',
+        startDate: new Date('2026-08-12'),
+        endDate: new Date('2026-09-13'),
+        days: 33
+      },
+      '2026-october': {
+        id: '2026-october',
+        name: 'October 2026',
+        startDate: new Date('2026-09-14'),
+        endDate: new Date('2026-10-15'),
+        days: 32
+      },
+      '2026-november': {
+        id: '2026-november',
+        name: 'November 2026',
+        startDate: new Date('2026-10-16'),
+        endDate: new Date('2026-11-14'),
+        days: 30
+      },
+      '2026-december': {
+        id: '2026-december',
+        name: 'December 2026',
+        startDate: new Date('2026-11-15'),
+        endDate: new Date('2026-12-14'),
         days: 30
       }
     };
     
-    const period = periods[periodId];
+    const period = CALENDAR_PERIODS[periodId];
     if (!period) {
       return res.status(404).json({ error: `Period ${periodId} not found` });
     }
     
-    console.log(`Period: ${period.name}`);
-    console.log(`Start: ${period.startDate.toISOString().split('T')[0]}`);
-    console.log(`End: ${period.endDate.toISOString().split('T')[0]}`);
+    console.log(`\n📅 Period: ${period.name}`);
+    console.log(`   Start Date: ${period.startDate.toISOString().split('T')[0]}`);
+    console.log(`   End Date: ${period.endDate.toISOString().split('T')[0]}`);
+    console.log(`   Scheduled Days: ${period.days}\n`);
     
-    // Get all readings for DMA-JFR from both collections
+    // Get all readings for DMA-JFR
     const manualReadings = await ReadingHistory.find({ dmaId: 'DMA-JFR' }).lean();
     const mobileReadings = await Reading.find({ dmaId: 'DMA-JFR' }).lean();
     
@@ -1804,8 +1957,6 @@ app.get('/api/water-balance-summary', async (req, res) => {
         source: 'mobile'
       }))
     ];
-    
-    console.log(`Total readings found: ${allReadings.length}`);
     
     // Group by point name
     const points = {
@@ -1829,20 +1980,44 @@ app.get('/api/water-balance-summary', async (req, res) => {
       points[key].readings.sort((a, b) => a.date - b.date);
     });
     
-    // Find closest reading to a date
-    const findClosest = (readings, targetDate) => {
+    // Helper function to find reading within ±4 days of target date
+    const findReadingForDate = (readings, targetDate) => {
       if (!readings.length) return null;
-      let closest = readings[0];
-      let minDiff = Math.abs(closest.date - targetDate);
       
-      for (let i = 1; i < readings.length; i++) {
-        const diff = Math.abs(readings[i].date - targetDate);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closest = readings[i];
+      // First, check for exact match on the target date
+      const exactMatch = readings.find(r => 
+        r.date.toISOString().split('T')[0] === targetDate.toISOString().split('T')[0]
+      );
+      
+      if (exactMatch) {
+        return {
+          reading: exactMatch,
+          daysDiff: 0,
+          isExact: true
+        };
+      }
+      
+      // If no exact match, look for readings within ±4 days
+      let closest = null;
+      let minDiff = Infinity;
+      
+      for (const reading of readings) {
+        const diffDays = Math.abs(reading.date - targetDate) / (1000 * 60 * 60 * 24);
+        if (diffDays <= 4 && diffDays < minDiff) {
+          minDiff = diffDays;
+          closest = reading;
         }
       }
-      return closest;
+      
+      if (closest) {
+        return {
+          reading: closest,
+          daysDiff: minDiff,
+          isExact: false
+        };
+      }
+      
+      return null;
     };
     
     const inletResults = [];
@@ -1850,39 +2025,125 @@ app.get('/api/water-balance-summary', async (req, res) => {
     
     // Calculate for each point
     for (const [pointName, pointData] of Object.entries(points)) {
-      console.log(`\nProcessing ${pointName} (${pointData.type}):`);
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`📍 ${pointName} (${pointData.type})`);
+      console.log(`${'='.repeat(60)}`);
+      
       pointData.readings.forEach(r => {
-        console.log(`  ${r.source}: ${r.value} on ${r.date.toISOString().split('T')[0]}`);
+        console.log(`   ${r.source}: ${r.value.toLocaleString()} m³ on ${r.date.toISOString().split('T')[0]}`);
       });
       
-      const startReading = findClosest(pointData.readings, period.startDate);
-      const endReading = findClosest(pointData.readings, period.endDate);
+      // Find readings for start and end dates within ±4 days
+      const startResult = findReadingForDate(pointData.readings, period.startDate);
+      const endResult = findReadingForDate(pointData.readings, period.endDate);
       
-      if (startReading && endReading) {
-        let difference = Math.abs(endReading.value - startReading.value);
-        
-        console.log(`  Start: ${startReading.value} on ${startReading.date.toISOString().split('T')[0]}`);
-        console.log(`  End: ${endReading.value} on ${endReading.date.toISOString().split('T')[0]}`);
-        console.log(`  Difference: ${difference} m³`);
-        
-        if (pointData.type === 'inlet') {
-          inletResults.push({ pointName, difference });
-        } else {
-          outletResults.push({ pointName, difference });
-        }
-      } else {
-        console.log(`  ⚠️ Missing readings for ${pointName}`);
+      // If either reading is missing (not found within ±4 days), skip this point
+      if (!startResult) {
+        console.log(`   ❌ NO READING FOUND within ±4 days of start date: ${period.startDate.toISOString().split('T')[0]}`);
+        console.log(`      Cannot calculate consumption for ${pointName}`);
+        continue;
       }
+      
+      if (!endResult) {
+        console.log(`   ❌ NO READING FOUND within ±4 days of end date: ${period.endDate.toISOString().split('T')[0]}`);
+        console.log(`      Cannot calculate consumption for ${pointName}`);
+        continue;
+      }
+      
+      const startReading = startResult.reading;
+      const endReading = endResult.reading;
+      
+      console.log(`\n   📍 START READING (Target: ${period.startDate.toISOString().split('T')[0]}):`);
+      console.log(`      ${startResult.isExact ? '✅ EXACT MATCH' : '⚠️ FOUND WITHIN 4 DAYS'} - ${startReading.value.toLocaleString()} m³ on ${startReading.date.toISOString().split('T')[0]}`);
+      if (!startResult.isExact) {
+        console.log(`      Days difference: ${startResult.daysDiff.toFixed(1)} days from target`);
+      }
+      
+      console.log(`\n   📍 END READING (Target: ${period.endDate.toISOString().split('T')[0]}):`);
+      console.log(`      ${endResult.isExact ? '✅ EXACT MATCH' : '⚠️ FOUND WITHIN 4 DAYS'} - ${endReading.value.toLocaleString()} m³ on ${endReading.date.toISOString().split('T')[0]}`);
+      if (!endResult.isExact) {
+        console.log(`      Days difference: ${endResult.daysDiff.toFixed(1)} days from target`);
+      }
+      
+      // Calculate consumption
+      const rawConsumption = endReading.value - startReading.value;
+      const absConsumption = Math.abs(rawConsumption);
+      const actualDays = (endReading.date - startReading.date) / (1000 * 60 * 60 * 24);
+      
+      console.log(`\n   📊 RAW CALCULATION:`);
+      console.log(`      ${endReading.value.toLocaleString()} - ${startReading.value.toLocaleString()} = ${rawConsumption.toLocaleString()} m³`);
+      console.log(`      Actual days between readings: ${actualDays.toFixed(1)} days`);
+      
+      let finalConsumption = absConsumption;
+      let isProRated = false;
+      let dailyRate = 0;
+      
+      // Apply pro-ration ONLY if readings are not exactly on the calendar dates
+      if (!startResult.isExact || !endResult.isExact) {
+        isProRated = true;
+        dailyRate = absConsumption / actualDays;
+        finalConsumption = dailyRate * period.days;
+        
+        console.log(`\n   📊 PRO-RATED CALCULATION:`);
+        console.log(`      Daily rate: ${dailyRate.toFixed(2)} m³/day`);
+        console.log(`      For ${period.days} days: ${finalConsumption.toFixed(0).toLocaleString()} m³`);
+      } else {
+        console.log(`\n   ✅ EXACT READINGS ON CALENDAR DATES:`);
+        console.log(`      Consumption: ${finalConsumption.toLocaleString()} m³`);
+      }
+      
+      const result = {
+        pointName: pointName,
+        startReading: {
+          value: startReading.value,
+          date: startReading.date,
+          source: startReading.source,
+          isExact: startResult.isExact,
+          daysFromTarget: startResult.isExact ? 0 : startResult.daysDiff
+        },
+        endReading: {
+          value: endReading.value,
+          date: endReading.date,
+          source: endReading.source,
+          isExact: endResult.isExact,
+          daysFromTarget: endResult.isExact ? 0 : endResult.daysDiff
+        },
+        rawConsumption: absConsumption,
+        actualDays: actualDays.toFixed(1),
+        consumption: finalConsumption,
+        isProRated: isProRated,
+        dailyRate: dailyRate.toFixed(2)
+      };
+      
+      if (pointData.type === 'inlet') {
+        inletResults.push(result);
+      } else {
+        outletResults.push(result);
+      }
+      
+      console.log(`\n   ✅ ${pointName} contributes: ${finalConsumption.toFixed(0).toLocaleString()} m³`);
     }
     
-    const totalInlet = inletResults.reduce((sum, i) => sum + i.difference, 0);
-    const totalOutlet = outletResults.reduce((sum, i) => sum + i.difference, 0);
+    // Calculate totals
+    const totalInlet = inletResults.reduce((sum, i) => sum + i.consumption, 0);
+    const totalOutlet = outletResults.reduce((sum, i) => sum + i.consumption, 0);
     const systemInflow = totalInlet - totalOutlet;
     
-    console.log(`\n📊 RESULTS:`);
-    console.log(`Total Inlet: ${totalInlet} m³`);
-    console.log(`Total Outlet: ${totalOutlet} m³`);
-    console.log(`System Inflow: ${systemInflow} m³`);
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`📊 FINAL RESULTS FOR ${period.name}:`);
+    console.log(`${'='.repeat(60)}`);
+    console.log(`\nINLET SUMMARY:`);
+    inletResults.forEach(i => {
+      console.log(`   ${i.pointName}: ${i.consumption.toFixed(0).toLocaleString()} m³ ${i.isProRated ? '(pro-rated)' : '(exact)'}`);
+    });
+    console.log(`\n   Total Inlet: ${totalInlet.toFixed(0).toLocaleString()} m³`);
+    console.log(`\nOUTLET SUMMARY:`);
+    outletResults.forEach(o => {
+      console.log(`   ${o.pointName}: ${o.consumption.toFixed(0).toLocaleString()} m³ ${o.isProRated ? '(pro-rated)' : '(exact)'}`);
+    });
+    console.log(`\n   Total Outlet: ${totalOutlet.toFixed(0).toLocaleString()} m³`);
+    console.log(`\n💧 SYSTEM INFLOW = ${systemInflow.toFixed(0).toLocaleString()} m³`);
+    console.log(`   (${totalInlet.toFixed(0)} - ${totalOutlet.toFixed(0)} = ${systemInflow.toFixed(0)})`);
     
     res.json({
       dmas: [{
