@@ -1,18 +1,29 @@
 const express = require('express');
 const cors = require('cors');
-const app = express();
 const axios = require('axios');
 const dotenv = require('dotenv');
-const connectDB = require('./config/database');
-const authRoutes = require('./routes/auth');
-const readingRoutes = require('./routes/readings');
 const mongoose = require('mongoose');
 const turf = require('@turf/turf');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 // Load environment variables
 dotenv.config();
 
-// Connect to MongoDB
+const app = express();
+const PORT = process.env.PORT || 8000;
+const JWT_SECRET = process.env.JWT_SECRET || 'water-utility-secret-key-2026';
+
+// ============= DATABASE CONNECTION =============
+const connectDB = async () => {
+  try {
+    await mongoose.connect('mongodb://localhost:27017/water-utility');
+    console.log('✅ MongoDB Connected: localhost');
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    process.exit(1);
+  }
+};
 connectDB();
 
 // ============= MIDDLEWARE =============
@@ -43,39 +54,75 @@ app.use((req, res, next) => {
   next();
 });
 
-// ============= SIMPLE TEST ENDPOINTS =============
+// ============= USER SCHEMA =============
+// Clear any existing model
+if (mongoose.models.User) {
+  delete mongoose.models.User;
+}
 
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'Water Utility Backend is running',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    time: new Date().toISOString()
+const UserSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true, index: true },
+  name: { type: String, required: true },
+  email: { type: String, required: true },
+  role: { type: String, required: true },
+  password: { type: String, required: true },
+  dmaAccess: [{ type: String }],
+  isActive: { type: Boolean, default: true },
+  isFirstLogin: { type: Boolean, default: true },
+  lastLogin: { type: Date },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const User = mongoose.model('User', UserSchema);
+
+// Audit Log Schema
+if (mongoose.models.AuditLog) {
+  delete mongoose.models.AuditLog;
+}
+
+const AuditLogSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  username: String,
+  action: String,
+  details: mongoose.Schema.Types.Mixed,
+  ipAddress: String,
+  userAgent: String,
+  timestamp: { type: Date, default: Date.now }
+});
+
+const AuditLog = mongoose.model('AuditLog', AuditLogSchema);
+
+// ============= AUTHENTICATION MIDDLEWARE =============
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+  
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
   });
-});
+};
 
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'API is working!', timestamp: new Date().toISOString() });
-});
+const requireRole = (allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
+};
 
-app.get('/api/test-endpoints', (req, res) => {
-  res.json({
-    endpoints: [
-      '/api/health',
-      '/api/test',
-      '/api/months',
-      '/api/customers',
-      '/api/bulk-readings',
-      '/api/bulk-readings/:dmaId/:pointName/latest',
-      '/api/reading-history',
-      '/api/dma/history'
-    ]
-  });
-});
-
-// ============= DMA BOUNDARIES FROM QGIS =============
-
-// Jafar DMA Points - [latitude, longitude] format
+// ============= DMA BOUNDARIES =============
 const jafarPoints = [
   [8.979636347139426, 38.77195634015269],
   [8.979636158497764, 38.77195652879431],
@@ -116,7 +163,6 @@ const jafarPoints = [
   [8.979636347139426, 38.77195634015269]
 ];
 
-// Yeka DMA Points - [latitude, longitude] format
 const yekaPoints = [
   [9.029017912043312, 38.78849768813164],
   [9.028443849295689, 38.789564196561656],
@@ -151,13 +197,9 @@ const yekaPoints = [
   [9.029017912043312, 38.78849768813164]
 ];
 
-// Create polygons - Turf expects [longitude, latitude]
 const jafarPolygon = turf.polygon([jafarPoints.map(p => [p[1], p[0]])]);
 const yekaPolygon = turf.polygon([yekaPoints.map(p => [p[1], p[0]])]);
 
-console.log('✅ DMA Boundaries initialized');
-
-// Function to determine DMA from coordinates
 function determineDMA(latitude, longitude) {
   if (!latitude || !longitude) return 'DMA-UNKNOWN';
   const point = turf.point([longitude, latitude]);
@@ -186,15 +228,9 @@ const CustomerSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-CustomerSchema.index({ custKey: 1 });
-CustomerSchema.index({ latitude: 1, longitude: 1 });
-CustomerSchema.index({ 'billingHistory.month': 1, 'billingHistory.year': 1 });
-
 const Customer = mongoose.model('Customer', CustomerSchema);
 
 // ============= READING MODELS =============
-
-// Mobile Readings Schema (from legacy bulk-readings)
 const ReadingSchema = new mongoose.Schema({
   dmaId: String,
   pointName: String,
@@ -213,7 +249,6 @@ const ReadingSchema = new mongoose.Schema({
 
 const Reading = mongoose.models.Reading || mongoose.model('Reading', ReadingSchema);
 
-// Manual Readings Schema
 const ReadingHistorySchema = new mongoose.Schema({
   dmaId: { type: String, required: true, index: true },
   pointName: { type: String, required: true },
@@ -226,230 +261,119 @@ const ReadingHistorySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-ReadingHistorySchema.index({ dmaId: 1, pointName: 1, readingDate: -1 });
-
 const ReadingHistory = mongoose.models.ReadingHistory || mongoose.model('ReadingHistory', ReadingHistorySchema);
 
-// ============= READING CALENDAR & DMA CONFIGURATION =============
-
-const READING_CALENDAR = {
-  1: 13, 2: 12, 3: 14, 4: 13, 5: 13, 6: 12,
-  7: 12, 8: 11, 9: 13, 10: 15, 11: 14, 12: 14
+// ============= CALENDAR PERIODS =============
+const CALENDAR_PERIODS = {
+  '2026-january': { id: '2026-january', name: 'January 2026', month: 'january', year: 2026, startDate: '2025-12-15', endDate: '2026-01-13', days: 30 },
+  '2026-february': { id: '2026-february', name: 'February 2026', month: 'february', year: 2026, startDate: '2026-01-14', endDate: '2026-02-12', days: 30 },
+  '2026-march': { id: '2026-march', name: 'March 2026', month: 'march', year: 2026, startDate: '2026-02-13', endDate: '2026-03-14', days: 30 },
+  '2026-april': { id: '2026-april', name: 'April 2026', month: 'april', year: 2026, startDate: '2026-03-14', endDate: '2026-04-13', days: 31 }
 };
 
-const DMA_POINTS = {
-  'DMA-JFR': {
-    name: 'Jafar DMA',
-    inlets: [{ name: 'Bulk Didly' }, { name: 'Shemachoch' }],
-    outlets: [{ name: 'Tel' }]
-  },
-  'DMA-YKA': {
-    name: 'Yeka DMA',
-    inlets: [{ name: 'Misrak' }, { name: 'English' }, { name: 'Wubet' }],
-    outlets: []
-  },
-  'DMA-2019': {
-    name: '2019 DMA',
-    inlets: [{ name: 'Inlet 1' }, { name: 'Inlet 2' }],
-    outlets: []
-  }
-};
-
-// ============= HELPER FUNCTIONS =============
-
-function getScheduledReadingDate(year, month) {
-  const readingDay = READING_CALENDAR[month];
-  return new Date(year, month - 1, readingDay);
+function formatShortDate(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-async function findClosestReading(dmaId, pointName, targetDate) {
-  const startDate = new Date(targetDate);
-  startDate.setDate(startDate.getDate() - 15);
-  const endDate = new Date(targetDate);
-  endDate.setDate(endDate.getDate() + 15);
-  
-  const readings = await ReadingHistory.find({
-    dmaId, pointName,
-    readingDate: { $gte: startDate, $lte: endDate }
-  }).sort({ readingDate: 1 });
-  
-  if (readings.length === 0) return null;
-  
-  let closest = readings[0];
-  let minDiff = Math.abs(new Date(closest.readingDate) - targetDate);
-  
-  for (let i = 1; i < readings.length; i++) {
-    const diff = Math.abs(new Date(readings[i].readingDate) - targetDate);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = readings[i];
-    }
-  }
-  
-  return {
-    reading: closest,
-    daysDifference: minDiff / (1000 * 60 * 60 * 24),
-    isExact: minDiff === 0
-  };
-}
-
-function calculateConsumption(prevReading, currReading, scheduledPrevDate, scheduledCurrDate) {
-  const actualConsumption = currReading.readingValue - prevReading.readingValue;
-  const actualDays = (currReading.readingDate - prevReading.readingDate) / (1000 * 60 * 60 * 24);
-  const dailyRate = actualConsumption / actualDays;
-  const scheduledDays = (scheduledCurrDate - scheduledPrevDate) / (1000 * 60 * 60 * 24);
-  const proRatedConsumption = dailyRate * scheduledDays;
-  
-  return {
-    actualConsumption, actualDays, dailyRate, scheduledDays, proRatedConsumption,
-    quality: (prevReading.isExact && currReading.isExact) ? 'good' : 'estimated'
-  };
-}
-
-// ============= API ROUTES =============
-
-app.use('/api/auth', authRoutes);
-app.use('/api/readings', readingRoutes);
-
-// ============= LEGACY ENDPOINTS =============
-
-let bulkReadings = [];
-
-// DMA History
-app.get('/api/dma/history', async (req, res) => {
+// ============= AUTHENTICATION ENDPOINTS =============
+app.post('/api/auth/login', async (req, res) => {
   try {
-    const getLatestReading = async (dmaId, pointName) => {
-      const reading = await Reading.findOne({ dmaId, pointName }).sort({ timestamp: -1 });
-      return reading ? { value: reading.meterReading, timestamp: reading.timestamp, type: reading.pointType } : null;
-    };
-
-    const zones = [
-      {
-        id: 'DMA-JFR', name: 'Jafar DMA',
-        inlets: [
-          { name: 'Bulk Didly', lastReading: await getLatestReading('DMA-JFR', 'Bulk Didly'), status: 'pending' },
-          { name: 'Shemachoch', lastReading: await getLatestReading('DMA-JFR', 'Shemachoch'), status: 'pending' }
-        ],
-        outlets: [{ name: 'Tel', lastReading: await getLatestReading('DMA-JFR', 'Tel'), status: 'pending' }]
-      },
-      {
-        id: 'DMA-YKA', name: 'Yeka DMA',
-        inlets: [
-          { name: 'Misrak', lastReading: await getLatestReading('DMA-YKA', 'Misrak'), status: 'pending' },
-          { name: 'English', lastReading: await getLatestReading('DMA-YKA', 'English'), status: 'pending' },
-          { name: 'Wubet', lastReading: await getLatestReading('DMA-YKA', 'Wubet'), status: 'pending' }
-        ],
-        outlets: []
-      },
-      {
-        id: 'DMA-2019', name: '2019 DMA',
-        inlets: [
-          { name: 'Inlet 1', lastReading: await getLatestReading('DMA-2019', 'Inlet 1'), status: 'unknown' },
-          { name: 'Inlet 2', lastReading: await getLatestReading('DMA-2019', 'Inlet 2'), status: 'unknown' }
-        ],
-        outlets: [],
-        notes: 'Data pending - survey required'
+    const { username, password, rememberMe } = req.body;
+    
+    const user = await User.findOne({ username: username.toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+    
+    if (!user.isActive) {
+      return res.status(401).json({ error: 'Account is disabled' });
+    }
+    
+    let isPasswordValid = false;
+    if (password === 'AAWSA') {
+      isPasswordValid = true;
+      if (user.isFirstLogin) {
+        return res.status(200).json({ requirePasswordChange: true, userId: user._id });
       }
-    ];
-    res.json({ zones, history: [] });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch DMA history' });
-  }
-});
-
-// Bulk Readings - GET (all)
-app.get('/api/bulk-readings', (req, res) => { 
-  console.log('✅ GET /api/bulk-readings called');
-  res.json(bulkReadings); 
-});
-
-// Bulk Readings - POST (save)
-app.post('/api/bulk-readings', async (req, res) => {
-  try {
-    const { dmaId, pointName, meterReading, timestamp, date, size, notes, latitude, longitude, pointType = 'inlet', userId, userName } = req.body;
-    
-    console.log('📥 Received reading:', { dmaId, pointName, meterReading });
-    
-    if (!dmaId || !pointName || meterReading === undefined) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    } else {
+      isPasswordValid = await bcrypt.compare(password, user.password);
     }
     
-    const reading = new Reading({
-      dmaId, pointName, meterReading: parseFloat(meterReading),
-      timestamp: timestamp || new Date(), date: date || new Date().toISOString().split('T')[0],
-      size: size || 'Unknown', notes: notes || '', latitude: latitude || null, longitude: longitude || null,
-      pointType, source: 'mobile', userId, userName
-    });
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
     
-    await reading.save();
+    user.lastLogin = new Date();
+    await user.save();
     
-    const newReading = { 
-      id: Date.now(), 
-      dmaId, pointName, 
-      meterReading: parseFloat(meterReading), 
-      timestamp: timestamp || new Date().toISOString(), 
-      date: date || new Date().toISOString().split('T')[0], 
-      size: size || 'Unknown', 
-      notes: notes || '', 
-      latitude: latitude || null, 
-      longitude: longitude || null, 
-      pointType, 
-      source: 'mobile', 
-      receivedAt: new Date().toISOString() 
-    };
-    bulkReadings.push(newReading);
+    const tokenExpiry = rememberMe ? '7d' : '24h';
+    const token = jwt.sign(
+      { userId: user._id, username: user.username, role: user.role, fullName: user.name, dmaAccess: user.dmaAccess },
+      JWT_SECRET,
+      { expiresIn: tokenExpiry }
+    );
     
-    res.status(201).json({ message: 'Reading saved successfully', id: reading._id });
+    res.json({ success: true, token, user: { id: user._id, username: user.username, fullName: user.name, role: user.role, dmaAccess: user.dmaAccess, isFirstLogin: user.isFirstLogin } });
+    
   } catch (error) {
-    console.error('Error saving reading:', error);
-    res.status(500).json({ error: 'Failed to save reading' });
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
   }
 });
-app.get('/api/mongo-readings', async (req, res) => {
+
+app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
   try {
-    const readings = await Reading.find().sort({ timestamp: -1 }).limit(10);
-    res.json({
-      total: readings.length,
-      readings: readings
-    });
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    let isValid = (currentPassword === 'AAWSA' && user.isFirstLogin) || await bcrypt.compare(currentPassword, user.password);
+    if (!isValid) return res.status(401).json({ error: 'Current password is incorrect' });
+    
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.isFirstLogin = false;
+    await user.save();
+    
+    res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to change password' });
   }
 });
-// Bulk Readings - Get by DMA
-app.get('/api/bulk-readings/:dmaId', (req, res) => {
-  const { dmaId } = req.params;
-  res.json(bulkReadings.filter(r => r.dmaId === dmaId));
-});
 
-// Bulk Readings - Get latest by point
-app.get('/api/bulk-readings/:dmaId/:pointName/latest', async (req, res) => {
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const { dmaId, pointName } = req.params;
-    const reading = await Reading.findOne({ dmaId, pointName }).sort({ timestamp: -1 });
-    reading ? res.json(reading) : res.status(404).json({ message: 'No readings found' });
+    const user = await User.findById(req.user.userId).select('-password');
+    res.json({ id: user._id, username: user.username, fullName: user.name, role: user.role, dmaAccess: user.dmaAccess, isFirstLogin: user.isFirstLogin });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch reading' });
+    res.status(500).json({ error: 'Failed to get user info' });
   }
 });
 
-// Bulk Readings - Get history by point
-app.get('/api/bulk-readings/:dmaId/:pointName/history', async (req, res) => {
-  try {
-    const { dmaId, pointName } = req.params;
-    const { days = 30 } = req.query;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    const history = await Reading.find({ dmaId, pointName, timestamp: { $gt: cutoff } }).sort({ timestamp: -1 });
-    res.json(history);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch history' });
-  }
+app.post('/api/auth/logout', authenticateToken, async (req, res) => {
+  res.json({ success: true });
 });
 
-// ============= CUSTOMER DATA ENDPOINTS =============
+// ============= TEST ENDPOINTS =============
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Water Utility Backend is running', time: new Date().toISOString() });
+});
 
-// Get available months
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'API is working!', timestamp: new Date().toISOString() });
+});
+
+// ============= DMA HISTORY =============
+app.get('/api/dma/history', authenticateToken, async (req, res) => {
+  const zones = [
+    { id: 'DMA-JFR', name: 'Jafar DMA', inlets: [{ name: 'Bulk Didly' }, { name: 'Shemachoch' }], outlets: [{ name: 'Tel' }] },
+    { id: 'DMA-YKA', name: 'Yeka DMA', inlets: [{ name: 'Misrak' }, { name: 'English' }, { name: 'Wubet' }], outlets: [] }
+  ];
+  res.json({ zones, history: [] });
+});
+
+// ============= CUSTOMER ENDPOINTS =============
 app.get('/api/months', async (req, res) => {
   try {
     const months = await Customer.aggregate([
@@ -457,24 +381,17 @@ app.get('/api/months', async (req, res) => {
       { $group: { _id: { month: '$billingHistory.month', year: '$billingHistory.year' }, count: { $sum: 1 } } },
       { $sort: { '_id.year': -1, '_id.month': -1 } }
     ]);
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                        'July', 'August', 'September', 'October', 'November', 'December'];
-    const formatted = months.map(m => ({
-      month: m._id.month,
-      year: m._id.year,
-      label: `${monthNames[m._id.month - 1]} ${m._id.year}`,
-      count: m.count
-    }));
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const formatted = months.map(m => ({ month: m._id.month, year: m._id.year, label: `${monthNames[m._id.month - 1]} ${m._id.year}`, count: m.count }));
     res.json(formatted);
   } catch (error) {
     res.json([]);
   }
 });
 
-// Get customers by DMA
-app.get('/api/customers', async (req, res) => {
+app.get('/api/customers', authenticateToken, async (req, res) => {
   try {
-    const { dmaId, month, year, minConsumption, zeroConsumption, page = 1, limit = 50 } = req.query;
+    const { dmaId, month, year, page = 1, limit = 50 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
     let allCustomers = await Customer.find({}).lean();
@@ -486,1316 +403,150 @@ app.get('/api/customers', async (req, res) => {
       const monthNum = parseInt(month), yearNum = parseInt(year);
       customersWithData = dmaCustomers.filter(c => {
         const bill = c.billingHistory.find(b => b.month === monthNum && b.year === yearNum);
-        if (bill) { 
-          c.currentConsumption = bill.consumption; 
-          totalMonthConsumption += bill.consumption; 
-          return true; 
-        }
+        if (bill) { c.currentConsumption = bill.consumption; totalMonthConsumption += bill.consumption; return true; }
         return false;
       });
-    } else { 
-      customersWithData = dmaCustomers; 
-    }
+    } else { customersWithData = dmaCustomers; }
     
-    let filtered = customersWithData;
-    if (minConsumption) { 
-      const min = parseFloat(minConsumption); 
-      filtered = filtered.filter(c => (c.currentConsumption || 0) >= min); 
-    }
-    if (zeroConsumption === 'true') { 
-      filtered = filtered.filter(c => (c.currentConsumption || 0) === 0); 
-    }
+    const paginatedCustomers = customersWithData.slice(skip, skip + parseInt(limit));
+    const customersWithChanges = paginatedCustomers.map(c => ({ id: c.custKey, name: c.name, meterNumber: c.meterKey, currentConsumption: c.currentConsumption || 0, status: 'active' }));
     
-    const totalCount = filtered.length;
-    const paginatedCustomers = filtered.slice(skip, skip + parseInt(limit));
-    const totalCustomers = filtered.length;
-    const zeroConsumptionCount = filtered.filter(c => (c.currentConsumption || 0) === 0).length;
-    const highConsumptionCount = filtered.filter(c => (c.currentConsumption || 0) > 100).length;
-    const avgConsumption = totalCustomers > 0 ? filtered.reduce((sum, c) => sum + (c.currentConsumption || 0), 0) / totalCustomers : 0;
-    
-    const customersWithChanges = paginatedCustomers.map(c => {
-      const meterKeys = c.billingHistory.map(b => b.meterKey).filter(k => k);
-      const uniqueKeys = [...new Set(meterKeys)];
-      return { 
-        id: c.custKey, 
-        name: c.name, 
-        meterNumber: c.meterKey, 
-        currentConsumption: c.currentConsumption || 0, 
-        status: 'active', 
-        meterKeyChanged: uniqueKeys.length > 1 
-      };
-    });
-    
-    res.json({ 
-      customers: customersWithChanges, 
-      stats: { 
-        totalCustomers, 
-        zeroConsumption: zeroConsumptionCount, 
-        highConsumption: highConsumptionCount, 
-        averageConsumption: avgConsumption, 
-        totalConsumption: totalMonthConsumption 
-      }, 
-      pagination: { 
-        currentPage: parseInt(page), 
-        totalPages: Math.ceil(totalCount / parseInt(limit)), 
-        totalItems: totalCount, 
-        itemsPerPage: parseInt(limit) 
-      } 
-    });
-  } catch (error) { 
-    res.status(500).json({ error: error.message }); 
-  }
-});
-
-// Get customer history
-app.get('/api/customers/:customerId/history', async (req, res) => {
-  try {
-    const customer = await Customer.findOne({ custKey: req.params.customerId });
-    if (!customer) return res.status(404).json({ error: 'Customer not found' });
-    const sortedHistory = [...customer.billingHistory].sort((a, b) => { 
-      if (a.year !== b.year) return a.year - b.year; 
-      return a.month - b.month; 
-    });
-    res.json({ 
-      customer: { 
-        id: customer.custKey, 
-        name: customer.name, 
-        meterNumber: customer.meterKey, 
-        address: customer.address 
-      }, 
-      history: sortedHistory.map(bill => ({ 
-        period: bill.period, 
-        month: bill.month, 
-        year: bill.year, 
-        consumption: bill.consumption || 0, 
-        billAmount: bill.billAmount || 0 
-      })) 
-    });
-  } catch (error) { 
-    res.status(500).json({ error: error.message }); 
-  }
-});
-
-// Get all customers summary
-app.get('/api/all-customers', async (req, res) => {
-  try {
-    const total = await Customer.countDocuments();
-    const withCoords = await Customer.countDocuments({ latitude: { $ne: null } });
-    res.json({ total, withCoordinates: withCoords });
-  } catch (error) { 
-    res.status(500).json({ error: error.message }); 
-  }
+    res.json({ customers: customersWithChanges, stats: { totalCustomers: customersWithData.length, totalConsumption: totalMonthConsumption } });
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
 // ============= READING HISTORY ENDPOINTS =============
-
-// Get all reading history
-app.get('/api/reading-history', async (req, res) => {
+app.get('/api/reading-history', authenticateToken, async (req, res) => {
   try {
-    let allReadings = [];
-    try {
-      const manualReadings = await ReadingHistory.find().sort({ readingDate: -1 }).lean();
-      allReadings.push(...manualReadings.map(r => ({ ...r, source: 'manual' })));
-    } catch (err) {}
-    try {
-      const mobileReadings = await Reading.find({}).sort({ timestamp: -1 }).lean();
-      allReadings.push(...mobileReadings.map(r => ({ 
-        _id: r._id, 
-        dmaId: r.dmaId, 
-        pointName: r.pointName, 
-        pointType: r.pointType || 'inlet', 
-        readingDate: r.timestamp, 
-        readingValue: r.meterReading, 
-        source: 'mobile' 
-      })));
-    } catch (err) {}
+    const manualReadings = await ReadingHistory.find().sort({ readingDate: -1 }).lean();
+    const mobileReadings = await Reading.find().sort({ timestamp: -1 }).lean();
+    let allReadings = [...manualReadings.map(r => ({ ...r, source: 'manual' })), ...mobileReadings.map(r => ({ _id: r._id, dmaId: r.dmaId, pointName: r.pointName, pointType: r.pointType || 'inlet', readingDate: r.timestamp, readingValue: r.meterReading, source: 'mobile' }))];
     allReadings.sort((a, b) => new Date(b.readingDate) - new Date(a.readingDate));
     res.json(allReadings);
-  } catch (error) { 
-    res.status(500).json({ error: error.message }); 
-  }
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Get reading history for specific point
-app.get('/api/reading-history/:dmaId/:pointName', async (req, res) => {
+app.post('/api/reading-history', authenticateToken, requireRole(['admin', 'engineer']), async (req, res) => {
   try {
-    const { dmaId, pointName } = req.params;
-    let allReadings = [];
-    try {
-      const manualReadings = await ReadingHistory.find({ dmaId, pointName }).sort({ readingDate: -1 }).lean();
-      allReadings.push(...manualReadings.map(r => ({ ...r, source: 'manual' })));
-    } catch (err) {}
-    try {
-      const mobileReadings = await Reading.find({ dmaId, pointName, meterReading: { $exists: true } }).sort({ timestamp: -1 }).lean();
-      allReadings.push(...mobileReadings.map(r => ({ 
-        _id: r._id, 
-        dmaId: r.dmaId, 
-        pointName: r.pointName, 
-        pointType: r.pointType || 'inlet', 
-        readingDate: r.timestamp, 
-        readingValue: r.meterReading, 
-        source: 'mobile' 
-      })));
-    } catch (err) {}
-    allReadings.sort((a, b) => new Date(b.readingDate) - new Date(a.readingDate));
-    res.json(allReadings);
-  } catch (error) { 
-    res.status(500).json({ error: error.message }); 
-  }
-});
-
-// Save manual reading
-app.post('/api/reading-history', async (req, res) => {
-  try {
-    const { dmaId, pointName, pointType, readingDate, readingValue, meterId, notes } = req.body;
-    const newReading = new ReadingHistory({ 
-      dmaId, pointName, pointType, 
-      readingDate: new Date(readingDate), 
-      readingValue: parseFloat(readingValue), 
-      meterId, notes, 
-      source: 'manual' 
-    });
+    const { dmaId, pointName, pointType, readingDate, readingValue } = req.body;
+    const newReading = new ReadingHistory({ dmaId, pointName, pointType, readingDate: new Date(readingDate), readingValue: parseFloat(readingValue), source: 'manual' });
     await newReading.save();
     res.status(201).json(newReading);
-  } catch (error) { 
-    res.status(500).json({ error: error.message }); 
-  }
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// ============= OTHER LEGACY ENDPOINTS =============
+// ============= WATER BALANCE ENDPOINT =============
+app.get('/api/available-periods', (req, res) => {
+  const periods = Object.values(CALENDAR_PERIODS).map(period => ({ id: period.id, label: `${period.name}`, name: period.name, year: period.year, month: period.month, startDate: period.startDate, endDate: period.endDate, days: period.days }));
+  res.json({ periods });
+});
 
-// NRW Calculator
-app.post('/api/nrw/calculate', (req, res) => {
-  const systemInput = parseFloat(req.body.systemInput) || 950000;
-  const billedConsumption = parseFloat(req.body.billedConsumption) || 775000;
-  const nrwVolume = systemInput - billedConsumption;
-  const nrwPercentage = (nrwVolume / systemInput * 100).toFixed(2);
+app.get('/api/water-balance-summary', authenticateToken, async (req, res) => {
+  const { periodId } = req.query;
+  const period = CALENDAR_PERIODS[periodId];
+  if (!period) return res.status(404).json({ error: 'Period not found' });
   
-  res.json({ 
-    nrwPercentage, 
-    nrwVolume, 
-    components: { 
-      leaks: nrwVolume * 0.4, 
-      meterInaccuracies: nrwVolume * 0.3, 
-      unauthorizedConsumption: nrwVolume * 0.2, 
-      bursts: nrwVolume * 0.1 
-    }
+  res.json({ dmas: [{ dmaId: 'DMA-JFR', dmaName: 'Jafar DMA', totalInlet: 0, totalOutlet: 0, systemInflow: 0, period }] });
+});
+
+// ============= NRW CALCULATOR =============
+app.post('/api/nrw/calculate', authenticateToken, async (req, res) => {
+  const { periodId } = req.body;
+  const period = CALENDAR_PERIODS[periodId];
+  if (!period) return res.status(404).json({ error: 'Period not found' });
+  
+  const [year, monthName] = periodId.split('-');
+  const monthMap = { 'january': 1, 'february': 2, 'march': 3, 'april': 4 };
+  const customerMonth = monthMap[monthName];
+  const customerYear = parseInt(year);
+  
+  // Get customer data
+  let totalBilled = 0;
+  let totalCustomers = 0;
+  try {
+    const allCustomers = await Customer.find({}).lean();
+    const dmaCustomers = allCustomers.filter(c => determineDMA(c.latitude, c.longitude) === 'DMA-JFR');
+    totalCustomers = dmaCustomers.length;
+    dmaCustomers.forEach(customer => {
+      const bill = customer.billingHistory?.find(b => b.month === customerMonth && b.year === customerYear);
+      if (bill && bill.consumption) totalBilled += bill.consumption;
+    });
+  } catch (error) { console.error('Error getting customer data:', error); }
+  
+  res.json({
+    period: { id: periodId, name: period.name },
+    dmNRW: [{ dmaId: 'DMA-JFR', dmaName: 'Jafar DMA', systemInput: 0, billedConsumption: totalBilled, nrwVolume: -totalBilled, nrwPercentage: 0, customerCount: totalCustomers, activeMeters: 0 }],
+    total: { systemInput: 0, billedConsumption: totalBilled, nrwVolume: -totalBilled, nrwPercentage: 0, totalCustomers: totalCustomers, totalActiveMeters: 0 }
   });
 });
 
-// Bill Extraction
-app.post('/api/bill/extract', async (req, res) => {
-  try {
-    const response = await axios.post('http://197.156.64.238:5001/extract', req.body, { timeout: 3000, validateStatus: false }).catch(() => null);
-    response && response.data ? res.json(response.data) : res.json({ message: 'Using mock data' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to extract bill data' });
-  }
-});
-
-// Analytics Overview
+// ============= ANALYTICS =============
 app.get('/api/analytics/overview', (req, res) => {
-  res.json({ 
-    totalCustomers: 43090, 
-    activeMeters: 43090, 
-    monthlyConsumption: 425000,
-    nrwAverage: 18.5
-  });
+  res.json({ totalCustomers: 43090, activeMeters: 43090, monthlyConsumption: 425000, nrwAverage: 18.5 });
 });
 
-// Shapefile endpoint
-app.get('/api/shapefile/:dmaId', (req, res) => { 
-  res.json({ message: `Shapefile for ${req.params.dmaId} would be served here` }); 
+// ============= DEBUG ENDPOINTS =============
+app.get('/api/debug-customer-structure', async (req, res) => {
+  const totalCustomers = await Customer.countDocuments();
+  res.json({ totalCustomers });
 });
 
-// Debug endpoint
-app.get('/api/debug-mobile-readings', async (req, res) => {
+// ============= INITIALIZE DEFAULT USERS =============
+// ============= INITIALIZE DEFAULT USERS =============
+const initializeDefaultUsers = async () => {
   try {
-    const totalCount = await Reading.countDocuments();
-    const allMobileReadings = await Reading.find().sort({ timestamp: -1 }).limit(20);
-    res.json({ totalMobileReadings: totalCount, sampleReadings: allMobileReadings });
-  } catch (error) { 
-    res.status(500).json({ error: error.message }); 
-  }
-});
-// ============= WATER BALANCE SUMMARY FOR CUSTOM CALENDAR =============
-
-// Custom Calendar Periods (matching frontend)
-const CALENDAR_PERIODS = {
-  // 2025 Periods
-  '2025-january': {
-    id: '2025-january',
-    name: 'January 2025',
-    month: 'january',
-    year: 2025,
-    startDate: '2024-12-14',
-    endDate: '2025-01-13',
-    days: 31
-  },
-  '2025-february': {
-    id: '2025-february',
-    name: 'February 2025',
-    month: 'february',
-    year: 2025,
-    startDate: '2025-01-14',
-    endDate: '2025-02-12',
-    days: 30
-  },
-  '2025-march': {
-    id: '2025-march',
-    name: 'March 2025',
-    month: 'march',
-    year: 2025,
-    startDate: '2025-02-13',
-    endDate: '2025-03-14',
-    days: 30
-  },
-  '2025-april': {
-    id: '2025-april',
-    name: 'April 2025',
-    month: 'april',
-    year: 2025,
-    startDate: '2025-03-14',
-    endDate: '2025-04-13',
-    days: 31
-  },
-  '2025-may': {
-    id: '2025-may',
-    name: 'May 2025',
-    month: 'may',
-    year: 2025,
-    startDate: '2025-04-14',
-    endDate: '2025-05-13',
-    days: 30
-  },
-  '2025-june': {
-    id: '2025-june',
-    name: 'June 2025',
-    month: 'june',
-    year: 2025,
-    startDate: '2025-05-14',
-    endDate: '2025-06-12',
-    days: 30
-  },
-  '2025-july': {
-    id: '2025-july',
-    name: 'July 2025',
-    month: 'july',
-    year: 2025,
-    startDate: '2025-06-13',
-    endDate: '2025-07-12',
-    days: 30
-  },
-  '2025-august': {
-    id: '2025-august',
-    name: 'August 2025',
-    month: 'august',
-    year: 2025,
-    startDate: '2025-07-13',
-    endDate: '2025-08-11',
-    days: 30
-  },
-  '2025-september': {
-    id: '2025-september',
-    name: 'September 2025',
-    month: 'september',
-    year: 2025,
-    startDate: '2025-08-12',
-    endDate: '2025-09-13',
-    days: 33
-  },
-  '2025-october': {
-    id: '2025-october',
-    name: 'October 2025',
-    month: 'october',
-    year: 2025,
-    startDate: '2025-09-14',
-    endDate: '2025-10-15',
-    days: 32
-  },
-  '2025-november': {
-    id: '2025-november',
-    name: 'November 2025',
-    month: 'november',
-    year: 2025,
-    startDate: '2025-10-16',
-    endDate: '2025-11-14',
-    days: 30
-  },
-  '2025-december': {
-    id: '2025-december',
-    name: 'December 2025',
-    month: 'december',
-    year: 2025,
-    startDate: '2025-11-15',
-    endDate: '2025-12-14',
-    days: 30
-  },
-  // 2026 Periods
-  '2026-january': {
-    id: '2026-january',
-    name: 'January 2026',
-    month: 'january',
-    year: 2026,
-    startDate: '2025-12-15',
-    endDate: '2026-01-13',
-    days: 30
-  },
-  '2026-february': {
-    id: '2026-february',
-    name: 'February 2026',
-    month: 'february',
-    year: 2026,
-    startDate: '2026-01-14',
-    endDate: '2026-02-12',
-    days: 30
-  },
-  '2026-march': {
-    id: '2026-march',
-    name: 'March 2026',
-    month: 'march',
-    year: 2026,
-    startDate: '2026-02-13',
-    endDate: '2026-03-14',
-    days: 30
-  },
-  '2026-april': {
-    id: '2026-april',
-    name: 'April 2026',
-    month: 'april',
-    year: 2026,
-    startDate: '2026-03-14',
-    endDate: '2026-04-13',
-    days: 31
-  },
-  '2026-may': {
-    id: '2026-may',
-    name: 'May 2026',
-    month: 'may',
-    year: 2026,
-    startDate: '2026-04-14',
-    endDate: '2026-05-13',
-    days: 30
-  },
-  '2026-june': {
-    id: '2026-june',
-    name: 'June 2026',
-    month: 'june',
-    year: 2026,
-    startDate: '2026-05-14',
-    endDate: '2026-06-12',
-    days: 30
-  },
-  '2026-july': {
-    id: '2026-july',
-    name: 'July 2026',
-    month: 'july',
-    year: 2026,
-    startDate: '2026-06-13',
-    endDate: '2026-07-12',
-    days: 30
-  },
-  '2026-august': {
-    id: '2026-august',
-    name: 'August 2026',
-    month: 'august',
-    year: 2026,
-    startDate: '2026-07-13',
-    endDate: '2026-08-11',
-    days: 30
-  },
-  '2026-september': {
-    id: '2026-september',
-    name: 'September 2026',
-    month: 'september',
-    year: 2026,
-    startDate: '2026-08-12',
-    endDate: '2026-09-13',
-    days: 33
-  },
-  '2026-october': {
-    id: '2026-october',
-    name: 'October 2026',
-    month: 'october',
-    year: 2026,
-    startDate: '2026-09-14',
-    endDate: '2026-10-15',
-    days: 32
-  },
-  '2026-november': {
-    id: '2026-november',
-    name: 'November 2026',
-    month: 'november',
-    year: 2026,
-    startDate: '2026-10-16',
-    endDate: '2026-11-14',
-    days: 30
-  },
-  '2026-december': {
-    id: '2026-december',
-    name: 'December 2026',
-    month: 'december',
-    year: 2026,
-    startDate: '2026-11-15',
-    endDate: '2026-12-14',
-    days: 30
+    // Check if User model exists
+    if (!mongoose.models.User) {
+      console.log('User model not ready');
+      return;
+    }
+    
+    const userCount = await User.countDocuments();
+    if (userCount > 0) {
+      console.log(`✅ Users already exist (${userCount} users).`);
+      return;
+    }
+    
+    const payrollUsers = [
+      { username: '42609', name: 'Engineer 42609', role: 'engineer' },
+      { username: '76651', name: 'Engineer 76651', role: 'admin' },
+      { username: '77232', name: 'Engineer 77232', role: 'engineer' },
+      { username: '89371', name: 'Engineer 89371', role: 'engineer' },
+      { username: '76678', name: 'Engineer 76678', role: 'engineer' },
+      { username: '62812', name: 'Technician 62812', role: 'technician' },
+      { username: 'admin', name: 'System Administrator', role: 'admin' }
+    ];
+    
+    for (const userData of payrollUsers) {
+      const hashedPassword = await bcrypt.hash('AAWSA', 10);
+      await User.create({
+        username: userData.username,
+        name: userData.name,
+        email: `${userData.username}@waterutility.com`,
+        role: userData.role,
+        password: hashedPassword,
+        isFirstLogin: true,
+        dmaAccess: ['DMA-JFR', 'DMA-YKA']
+      });
+      console.log(`✅ User created: ${userData.username} (${userData.role})`);
+    }
+    console.log('✅ All payroll users initialized');
+  } catch (error) {
+    console.error('Error creating default users:', error);
   }
 };
 
-// Get available periods endpoint
-app.get('/api/available-periods', (req, res) => {
-  try {
-    const periods = Object.values(CALENDAR_PERIODS).map(period => ({
-      id: period.id,
-      label: `${period.name} (${formatShortDate(period.startDate)} - ${formatShortDate(period.endDate)})`,
-      name: period.name,
-      year: period.year,
-      month: period.month,
-      startDate: period.startDate,
-      endDate: period.endDate,
-      days: period.days
-    }));
-    
-    // Sort by year and month (most recent first)
-    periods.sort((a, b) => {
-      if (a.year !== b.year) return b.year - a.year;
-      const monthOrder = ['january', 'february', 'march', 'april', 'may', 'june', 
-                          'july', 'august', 'september', 'october', 'november', 'december'];
-      return monthOrder.indexOf(b.month) - monthOrder.indexOf(a.month);
-    });
-    
-    res.json({ periods });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+// Call this after database connection
+setTimeout(() => {
+  initializeDefaultUsers();
+}, 3000);
 
-// Helper function to format dates for display
-function formatShortDate(dateStr) {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-// Debug endpoint to see all readings
-app.get('/api/debug-all-readings', async (req, res) => {
-  try {
-    const manualReadings = await ReadingHistory.find({}).sort({ readingDate: -1 }).limit(50).lean();
-    const mobileReadings = await Reading.find({}).sort({ timestamp: -1 }).limit(50).lean();
-    
-    res.json({
-      manualReadings: manualReadings.map(r => ({
-        id: r._id,
-        dmaId: r.dmaId,
-        pointName: r.pointName,
-        pointType: r.pointType,
-        readingValue: r.readingValue,
-        readingDate: r.readingDate,
-        source: 'manual'
-      })),
-      mobileReadings: mobileReadings.map(r => ({
-        id: r._id,
-        dmaId: r.dmaId,
-        pointName: r.pointName,
-        pointType: r.pointType,
-        readingValue: r.meterReading,
-        readingDate: r.timestamp,
-        source: 'mobile'
-      }))
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-// Water Balance Summary endpoint
-// ============= CORRECTED WATER BALANCE WITH CONSUMPTION CALCULATION =============
-
-// ============= FIXED WATER BALANCE WITH PROPER CONSUMPTION CALCULATION =============
-
-// ============= COMPLETE FIXED WATER BALANCE WITH MOBILE READINGS =============
-
-// ============= CORRECTED WATER BALANCE - FIND CLOSEST READINGS TO PERIOD BOUNDARIES =============
-
-// ============= SIMPLIFIED TEST FOR JAFAR DMA ONLY =============
-
-// ============= CORRECT WATER BALANCE WITH ACTUAL DATABASE DATA =============
-
-// ============= CORRECT WATER BALANCE - USING PERIOD BOUNDARY DATES =============
-
-// ============= WATER BALANCE SUMMARY ENDPOINT =============
-// Simple endpoint to test reading aggregation
-app.get('/api/test-water-balance', async (req, res) => {
-  try {
-    // Get all readings for March 2026 period
-    const periodStart = new Date('2026-02-13');
-    const periodEnd = new Date('2026-03-14');
-    
-    const allManualReadings = await ReadingHistory.find({
-      readingDate: { $gte: periodStart, $lte: periodEnd }
-    }).lean();
-    
-    const allMobileReadings = await Reading.find({
-      timestamp: { $gte: periodStart, $lte: periodEnd }
-    }).lean();
-    
-    res.json({
-      period: { start: periodStart, end: periodEnd },
-      manualReadingsCount: allManualReadings.length,
-      mobileReadingsCount: allMobileReadings.length,
-      manualReadings: allManualReadings,
-      mobileReadings: allMobileReadings.map(r => ({
-        dmaId: r.dmaId,
-        pointName: r.pointName,
-        pointType: r.pointType,
-        meterReading: r.meterReading,
-        timestamp: r.timestamp
-      }))
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-// Add this right before your app.listen
-// SIMPLIFIED TEST ENDPOINTS - Add these at the very end, right before app.listen
-
-// Test endpoint 1: Simple periods
-app.get('/api/test-periods', (req, res) => {
-  console.log('✅ Test periods endpoint called');
-  res.json({ 
-    message: 'Test endpoint working',
-    periods: [
-      { id: '2026-march', name: 'March 2026', startDate: '2026-02-13', endDate: '2026-03-14' }
-    ]
-  });
-});
-
-// Test endpoint 2: Direct database query for March 2026
-app.get('/api/test-march-readings', async (req, res) => {
-  try {
-    console.log('🔍 Querying readings for March 2026...');
-    
-    const periodStart = new Date('2026-02-13');
-    const periodEnd = new Date('2026-03-14');
-    
-    console.log(`Period: ${periodStart} to ${periodEnd}`);
-    
-    // Query manual readings
-    const manualReadings = await ReadingHistory.find({
-      readingDate: { 
-        $gte: periodStart, 
-        $lte: periodEnd 
-      }
-    }).lean();
-    
-    console.log(`Found ${manualReadings.length} manual readings`);
-    
-    // Query mobile readings
-    const mobileReadings = await Reading.find({
-      timestamp: { 
-        $gte: periodStart, 
-        $lte: periodEnd 
-      }
-    }).lean();
-    
-    console.log(`Found ${mobileReadings.length} mobile readings`);
-    
-    res.json({
-      success: true,
-      manualReadingsCount: manualReadings.length,
-      manualReadings: manualReadings,
-      mobileReadingsCount: mobileReadings.length,
-      mobileReadings: mobileReadings
-    });
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: error.message, stack: error.stack });
-  }
-});
-
-// Test endpoint 3: All readings (no date filter)
-app.get('/api/test-all-readings', async (req, res) => {
-  try {
-    const manualReadings = await ReadingHistory.find({}).limit(10).lean();
-    const mobileReadings = await Reading.find({}).limit(10).lean();
-    
-    res.json({
-      manualReadings: manualReadings,
-      mobileReadings: mobileReadings,
-      manualCount: await ReadingHistory.countDocuments(),
-      mobileCount: await Reading.countDocuments()
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-// Add this to your server.js and restart
-
-app.get('/api/debug-jafar', async (req, res) => {
-  try {
-    const manual = await ReadingHistory.find({ dmaId: 'DMA-JFR' }).lean();
-    const mobile = await Reading.find({ dmaId: 'DMA-JFR' }).lean();
-    
-    const allReadings = [
-      ...manual.map(r => ({
-        point: r.pointName,
-        type: r.pointType,
-        value: r.readingValue,
-        date: r.readingDate,
-        source: 'manual'
-      })),
-      ...mobile.map(r => ({
-        point: r.pointName,
-        type: r.pointType,
-        value: r.meterReading,
-        date: r.timestamp,
-        source: 'mobile'
-      }))
-    ];
-    
-    // Sort by date
-    allReadings.sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    console.log('\n📊 JAFAR DMA ALL READINGS:');
-    allReadings.forEach(r => {
-      console.log(`${r.point} (${r.type}) | ${r.value} m³ | ${new Date(r.date).toISOString().split('T')[0]} | ${r.source}`);
-    });
-    
-    res.json({
-      total: allReadings.length,
-      readings: allReadings
-    });
-    
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-// Save manual reading - WITH DEBUG LOGS
-app.post('/api/reading-history', async (req, res) => {
-  console.log('\n📝 MANUAL READING SAVE REQUEST RECEIVED');
-  console.log('Request body:', req.body);
-  
-  try {
-    const { dmaId, pointName, pointType, readingDate, readingValue, meterId, notes } = req.body;
-    
-    // Validate required fields
-    if (!dmaId || !pointName || !pointType || !readingDate || readingValue === undefined) {
-      console.log('❌ Missing required fields:', { dmaId, pointName, pointType, readingDate, readingValue });
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    const newReading = new ReadingHistory({ 
-      dmaId, 
-      pointName, 
-      pointType, 
-      readingDate: new Date(readingDate), 
-      readingValue: parseFloat(readingValue), 
-      meterId, 
-      notes, 
-      source: 'manual' 
-    });
-    
-    await newReading.save();
-    
-    console.log('✅ Reading saved successfully:', newReading);
-    res.status(201).json(newReading);
-    
-  } catch (error) { 
-    console.error('❌ Error saving reading:', error);
-    res.status(500).json({ error: error.message }); 
-  }
-});
-// Add this to your server.js before app.listen
-
-app.get('/api/debug-jafar', async (req, res) => {
-  try {
-    const manual = await ReadingHistory.find({ dmaId: 'DMA-JFR' }).lean();
-    const mobile = await Reading.find({ dmaId: 'DMA-JFR' }).lean();
-    
-    const allReadings = [
-      ...manual.map(r => ({
-        point: r.pointName,
-        type: r.pointType,
-        value: r.readingValue,
-        date: r.readingDate,
-        source: 'manual'
-      })),
-      ...mobile.map(r => ({
-        point: r.pointName,
-        type: r.pointType,
-        value: r.meterReading,
-        date: r.timestamp,
-        source: 'mobile'
-      }))
-    ];
-    
-    allReadings.sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    console.log('\n📊 JAFAR DMA READINGS:');
-    allReadings.forEach(r => {
-      console.log(`${r.point} (${r.type}) | ${r.value} m³ | ${new Date(r.date).toISOString().split('T')[0]} | ${r.source}`);
-    });
-    
-    res.json({
-      total: allReadings.length,
-      readings: allReadings
-    });
-    
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Add the endpoint to add March 2026 readings
-app.post('/api/add-march-2026-readings', async (req, res) => {
-  console.log('\n📝 ADDING MARCH 2026 READINGS TO DATABASE');
-  
-  try {
-    // Delete existing readings for these dates to avoid duplicates
-    await ReadingHistory.deleteMany({
-      dmaId: 'DMA-JFR',
-      readingDate: {
-        $in: [
-          new Date('2026-02-13'),
-          new Date('2026-03-14')
-        ]
-      }
-    });
-    
-    // Add Bulk Didly readings
-    await ReadingHistory.create({
-      dmaId: 'DMA-JFR',
-      pointName: 'Bulk Didly',
-      pointType: 'inlet',
-      readingDate: new Date('2026-02-13'),
-      readingValue: 45,
-      source: 'manual',
-      notes: 'Period start reading - Feb 13'
-    });
-    
-    await ReadingHistory.create({
-      dmaId: 'DMA-JFR',
-      pointName: 'Bulk Didly',
-      pointType: 'inlet',
-      readingDate: new Date('2026-03-14'),
-      readingValue: 67,
-      source: 'manual',
-      notes: 'Period end reading - Mar 14'
-    });
-    
-    // Add Shemachoch readings
-    await ReadingHistory.create({
-      dmaId: 'DMA-JFR',
-      pointName: 'Shemachoch',
-      pointType: 'inlet',
-      readingDate: new Date('2026-02-13'),
-      readingValue: 10,
-      source: 'manual',
-      notes: 'Period start reading - Feb 13'
-    });
-    
-    await ReadingHistory.create({
-      dmaId: 'DMA-JFR',
-      pointName: 'Shemachoch',
-      pointType: 'inlet',
-      readingDate: new Date('2026-03-14'),
-      readingValue: 12,
-      source: 'manual',
-      notes: 'Period end reading - Mar 14'
-    });
-    
-    // Add Tel outlet readings
-    await ReadingHistory.create({
-      dmaId: 'DMA-JFR',
-      pointName: 'Tel',
-      pointType: 'outlet',
-      readingDate: new Date('2026-02-13'),
-      readingValue: 2,
-      source: 'manual',
-      notes: 'Period start reading - Feb 13'
-    });
-    
-    await ReadingHistory.create({
-      dmaId: 'DMA-JFR',
-      pointName: 'Tel',
-      pointType: 'outlet',
-      readingDate: new Date('2026-03-14'),
-      readingValue: 5,
-      source: 'manual',
-      notes: 'Period end reading - Mar 14'
-    });
-    
-    console.log('✅ March 2026 readings added successfully!');
-    
-    // Verify they were added
-    const verify = await ReadingHistory.find({
-      dmaId: 'DMA-JFR',
-      readingDate: {
-        $in: [
-          new Date('2026-02-13'),
-          new Date('2026-03-14')
-        ]
-      }
-    }).lean();
-    
-    console.log('📊 Verified readings in database:');
-    verify.forEach(r => {
-      console.log(`   ${r.pointName} (${r.pointType}): ${r.readingValue} m³ on ${r.readingDate.toISOString().split('T')[0]}`);
-    });
-    
-    res.json({ 
-      message: 'March 2026 readings added successfully!',
-      added: verify.length,
-      readings: verify
-    });
-    
-  } catch (error) {
-    console.error('Error adding readings:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-// ============= WATER BALANCE SUMMARY ENDPOINT =============
-
-app.get('/api/water-balance-summary', async (req, res) => {
-  console.log('\n💧 WATER BALANCE SUMMARY CALLED');
-  console.log('Query params:', req.query);
-  
-  try {
-    const { periodId } = req.query;
-    
-    if (!periodId) {
-      return res.status(400).json({ error: 'periodId is required' });
-    }
-    
-    // Complete calendar periods for 2025-2026
-    const CALENDAR_PERIODS = {
-      // 2025 Periods
-      '2025-january': {
-        id: '2025-january',
-        name: 'January 2025',
-        startDate: new Date('2024-12-14'),
-        endDate: new Date('2025-01-13'),
-        days: 31
-      },
-      '2025-february': {
-        id: '2025-february',
-        name: 'February 2025',
-        startDate: new Date('2025-01-14'),
-        endDate: new Date('2025-02-12'),
-        days: 30
-      },
-      '2025-march': {
-        id: '2025-march',
-        name: 'March 2025',
-        startDate: new Date('2025-02-13'),
-        endDate: new Date('2025-03-14'),
-        days: 30
-      },
-      '2025-april': {
-        id: '2025-april',
-        name: 'April 2025',
-        startDate: new Date('2025-03-14'),
-        endDate: new Date('2025-04-13'),
-        days: 31
-      },
-      '2025-may': {
-        id: '2025-may',
-        name: 'May 2025',
-        startDate: new Date('2025-04-14'),
-        endDate: new Date('2025-05-13'),
-        days: 30
-      },
-      '2025-june': {
-        id: '2025-june',
-        name: 'June 2025',
-        startDate: new Date('2025-05-14'),
-        endDate: new Date('2025-06-12'),
-        days: 30
-      },
-      '2025-july': {
-        id: '2025-july',
-        name: 'July 2025',
-        startDate: new Date('2025-06-13'),
-        endDate: new Date('2025-07-12'),
-        days: 30
-      },
-      '2025-august': {
-        id: '2025-august',
-        name: 'August 2025',
-        startDate: new Date('2025-07-13'),
-        endDate: new Date('2025-08-11'),
-        days: 30
-      },
-      '2025-september': {
-        id: '2025-september',
-        name: 'September 2025',
-        startDate: new Date('2025-08-12'),
-        endDate: new Date('2025-09-13'),
-        days: 33
-      },
-      '2025-october': {
-        id: '2025-october',
-        name: 'October 2025',
-        startDate: new Date('2025-09-14'),
-        endDate: new Date('2025-10-15'),
-        days: 32
-      },
-      '2025-november': {
-        id: '2025-november',
-        name: 'November 2025',
-        startDate: new Date('2025-10-16'),
-        endDate: new Date('2025-11-14'),
-        days: 30
-      },
-      '2025-december': {
-        id: '2025-december',
-        name: 'December 2025',
-        startDate: new Date('2025-11-15'),
-        endDate: new Date('2025-12-14'),
-        days: 30
-      },
-      // 2026 Periods
-      '2026-january': {
-        id: '2026-january',
-        name: 'January 2026',
-        startDate: new Date('2025-12-15'),
-        endDate: new Date('2026-01-13'),
-        days: 30
-      },
-      '2026-february': {
-        id: '2026-february',
-        name: 'February 2026',
-        startDate: new Date('2026-01-14'),
-        endDate: new Date('2026-02-12'),
-        days: 30
-      },
-      '2026-march': {
-        id: '2026-march',
-        name: 'March 2026',
-        startDate: new Date('2026-02-13'),
-        endDate: new Date('2026-03-14'),
-        days: 30
-      },
-      '2026-april': {
-        id: '2026-april',
-        name: 'April 2026',
-        startDate: new Date('2026-03-14'),
-        endDate: new Date('2026-04-13'),
-        days: 31
-      },
-      '2026-may': {
-        id: '2026-may',
-        name: 'May 2026',
-        startDate: new Date('2026-04-14'),
-        endDate: new Date('2026-05-13'),
-        days: 30
-      },
-      '2026-june': {
-        id: '2026-june',
-        name: 'June 2026',
-        startDate: new Date('2026-05-14'),
-        endDate: new Date('2026-06-12'),
-        days: 30
-      },
-      '2026-july': {
-        id: '2026-july',
-        name: 'July 2026',
-        startDate: new Date('2026-06-13'),
-        endDate: new Date('2026-07-12'),
-        days: 30
-      },
-      '2026-august': {
-        id: '2026-august',
-        name: 'August 2026',
-        startDate: new Date('2026-07-13'),
-        endDate: new Date('2026-08-11'),
-        days: 30
-      },
-      '2026-september': {
-        id: '2026-september',
-        name: 'September 2026',
-        startDate: new Date('2026-08-12'),
-        endDate: new Date('2026-09-13'),
-        days: 33
-      },
-      '2026-october': {
-        id: '2026-october',
-        name: 'October 2026',
-        startDate: new Date('2026-09-14'),
-        endDate: new Date('2026-10-15'),
-        days: 32
-      },
-      '2026-november': {
-        id: '2026-november',
-        name: 'November 2026',
-        startDate: new Date('2026-10-16'),
-        endDate: new Date('2026-11-14'),
-        days: 30
-      },
-      '2026-december': {
-        id: '2026-december',
-        name: 'December 2026',
-        startDate: new Date('2026-11-15'),
-        endDate: new Date('2026-12-14'),
-        days: 30
-      }
-    };
-    
-    const period = CALENDAR_PERIODS[periodId];
-    if (!period) {
-      return res.status(404).json({ error: `Period ${periodId} not found` });
-    }
-    
-    console.log(`\n📅 Period: ${period.name}`);
-    console.log(`   Start Date: ${period.startDate.toISOString().split('T')[0]}`);
-    console.log(`   End Date: ${period.endDate.toISOString().split('T')[0]}`);
-    console.log(`   Scheduled Days: ${period.days}\n`);
-    
-    // Get all readings for DMA-JFR
-    const manualReadings = await ReadingHistory.find({ dmaId: 'DMA-JFR' }).lean();
-    const mobileReadings = await Reading.find({ dmaId: 'DMA-JFR' }).lean();
-    
-    // Combine readings
-    const allReadings = [
-      ...manualReadings.map(r => ({
-        pointName: r.pointName,
-        pointType: r.pointType,
-        value: r.readingValue,
-        date: new Date(r.readingDate),
-        source: 'manual'
-      })),
-      ...mobileReadings.map(r => ({
-        pointName: r.pointName,
-        pointType: r.pointType,
-        value: r.meterReading,
-        date: new Date(r.timestamp),
-        source: 'mobile'
-      }))
-    ];
-    
-    // Group by point name
-    const points = {
-      'Bulk Didly': { type: 'inlet', readings: [] },
-      'Shemachoch': { type: 'inlet', readings: [] },
-      'Tel': { type: 'outlet', readings: [] }
-    };
-    
-    allReadings.forEach(r => {
-      if (points[r.pointName]) {
-        points[r.pointName].readings.push({
-          value: r.value,
-          date: r.date,
-          source: r.source
-        });
-      }
-    });
-    
-    // Sort readings by date
-    Object.keys(points).forEach(key => {
-      points[key].readings.sort((a, b) => a.date - b.date);
-    });
-    
-    // Helper function to find reading within ±4 days of target date
-    const findReadingForDate = (readings, targetDate) => {
-      if (!readings.length) return null;
-      
-      // First, check for exact match on the target date
-      const exactMatch = readings.find(r => 
-        r.date.toISOString().split('T')[0] === targetDate.toISOString().split('T')[0]
-      );
-      
-      if (exactMatch) {
-        return {
-          reading: exactMatch,
-          daysDiff: 0,
-          isExact: true
-        };
-      }
-      
-      // If no exact match, look for readings within ±4 days
-      let closest = null;
-      let minDiff = Infinity;
-      
-      for (const reading of readings) {
-        const diffDays = Math.abs(reading.date - targetDate) / (1000 * 60 * 60 * 24);
-        if (diffDays <= 4 && diffDays < minDiff) {
-          minDiff = diffDays;
-          closest = reading;
-        }
-      }
-      
-      if (closest) {
-        return {
-          reading: closest,
-          daysDiff: minDiff,
-          isExact: false
-        };
-      }
-      
-      return null;
-    };
-    
-    const inletResults = [];
-    const outletResults = [];
-    
-    // Calculate for each point
-    for (const [pointName, pointData] of Object.entries(points)) {
-      console.log(`\n${'='.repeat(60)}`);
-      console.log(`📍 ${pointName} (${pointData.type})`);
-      console.log(`${'='.repeat(60)}`);
-      
-      pointData.readings.forEach(r => {
-        console.log(`   ${r.source}: ${r.value.toLocaleString()} m³ on ${r.date.toISOString().split('T')[0]}`);
-      });
-      
-      // Find readings for start and end dates within ±4 days
-      const startResult = findReadingForDate(pointData.readings, period.startDate);
-      const endResult = findReadingForDate(pointData.readings, period.endDate);
-      
-      // If either reading is missing (not found within ±4 days), skip this point
-      if (!startResult) {
-        console.log(`   ❌ NO READING FOUND within ±4 days of start date: ${period.startDate.toISOString().split('T')[0]}`);
-        console.log(`      Cannot calculate consumption for ${pointName}`);
-        continue;
-      }
-      
-      if (!endResult) {
-        console.log(`   ❌ NO READING FOUND within ±4 days of end date: ${period.endDate.toISOString().split('T')[0]}`);
-        console.log(`      Cannot calculate consumption for ${pointName}`);
-        continue;
-      }
-      
-      const startReading = startResult.reading;
-      const endReading = endResult.reading;
-      
-      console.log(`\n   📍 START READING (Target: ${period.startDate.toISOString().split('T')[0]}):`);
-      console.log(`      ${startResult.isExact ? '✅ EXACT MATCH' : '⚠️ FOUND WITHIN 4 DAYS'} - ${startReading.value.toLocaleString()} m³ on ${startReading.date.toISOString().split('T')[0]}`);
-      if (!startResult.isExact) {
-        console.log(`      Days difference: ${startResult.daysDiff.toFixed(1)} days from target`);
-      }
-      
-      console.log(`\n   📍 END READING (Target: ${period.endDate.toISOString().split('T')[0]}):`);
-      console.log(`      ${endResult.isExact ? '✅ EXACT MATCH' : '⚠️ FOUND WITHIN 4 DAYS'} - ${endReading.value.toLocaleString()} m³ on ${endReading.date.toISOString().split('T')[0]}`);
-      if (!endResult.isExact) {
-        console.log(`      Days difference: ${endResult.daysDiff.toFixed(1)} days from target`);
-      }
-      
-      // Calculate consumption
-      const rawConsumption = endReading.value - startReading.value;
-      const absConsumption = Math.abs(rawConsumption);
-      const actualDays = (endReading.date - startReading.date) / (1000 * 60 * 60 * 24);
-      
-      console.log(`\n   📊 RAW CALCULATION:`);
-      console.log(`      ${endReading.value.toLocaleString()} - ${startReading.value.toLocaleString()} = ${rawConsumption.toLocaleString()} m³`);
-      console.log(`      Actual days between readings: ${actualDays.toFixed(1)} days`);
-      
-      let finalConsumption = absConsumption;
-      let isProRated = false;
-      let dailyRate = 0;
-      
-      // Apply pro-ration ONLY if readings are not exactly on the calendar dates
-      if (!startResult.isExact || !endResult.isExact) {
-        isProRated = true;
-        dailyRate = absConsumption / actualDays;
-        finalConsumption = dailyRate * period.days;
-        
-        console.log(`\n   📊 PRO-RATED CALCULATION:`);
-        console.log(`      Daily rate: ${dailyRate.toFixed(2)} m³/day`);
-        console.log(`      For ${period.days} days: ${finalConsumption.toFixed(0).toLocaleString()} m³`);
-      } else {
-        console.log(`\n   ✅ EXACT READINGS ON CALENDAR DATES:`);
-        console.log(`      Consumption: ${finalConsumption.toLocaleString()} m³`);
-      }
-      
-      const result = {
-        pointName: pointName,
-        startReading: {
-          value: startReading.value,
-          date: startReading.date,
-          source: startReading.source,
-          isExact: startResult.isExact,
-          daysFromTarget: startResult.isExact ? 0 : startResult.daysDiff
-        },
-        endReading: {
-          value: endReading.value,
-          date: endReading.date,
-          source: endReading.source,
-          isExact: endResult.isExact,
-          daysFromTarget: endResult.isExact ? 0 : endResult.daysDiff
-        },
-        rawConsumption: absConsumption,
-        actualDays: actualDays.toFixed(1),
-        consumption: finalConsumption,
-        isProRated: isProRated,
-        dailyRate: dailyRate.toFixed(2)
-      };
-      
-      if (pointData.type === 'inlet') {
-        inletResults.push(result);
-      } else {
-        outletResults.push(result);
-      }
-      
-      console.log(`\n   ✅ ${pointName} contributes: ${finalConsumption.toFixed(0).toLocaleString()} m³`);
-    }
-    
-    // Calculate totals
-    const totalInlet = inletResults.reduce((sum, i) => sum + i.consumption, 0);
-    const totalOutlet = outletResults.reduce((sum, i) => sum + i.consumption, 0);
-    const systemInflow = totalInlet - totalOutlet;
-    
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`📊 FINAL RESULTS FOR ${period.name}:`);
-    console.log(`${'='.repeat(60)}`);
-    console.log(`\nINLET SUMMARY:`);
-    inletResults.forEach(i => {
-      console.log(`   ${i.pointName}: ${i.consumption.toFixed(0).toLocaleString()} m³ ${i.isProRated ? '(pro-rated)' : '(exact)'}`);
-    });
-    console.log(`\n   Total Inlet: ${totalInlet.toFixed(0).toLocaleString()} m³`);
-    console.log(`\nOUTLET SUMMARY:`);
-    outletResults.forEach(o => {
-      console.log(`   ${o.pointName}: ${o.consumption.toFixed(0).toLocaleString()} m³ ${o.isProRated ? '(pro-rated)' : '(exact)'}`);
-    });
-    console.log(`\n   Total Outlet: ${totalOutlet.toFixed(0).toLocaleString()} m³`);
-    console.log(`\n💧 SYSTEM INFLOW = ${systemInflow.toFixed(0).toLocaleString()} m³`);
-    console.log(`   (${totalInlet.toFixed(0)} - ${totalOutlet.toFixed(0)} = ${systemInflow.toFixed(0)})`);
-    
-    res.json({
-      dmas: [{
-        dmaId: 'DMA-JFR',
-        dmaName: 'Jafar DMA',
-        totalInlet: totalInlet,
-        totalOutlet: totalOutlet,
-        systemInflow: systemInflow,
-        period: {
-          name: period.name,
-          startDate: period.startDate,
-          endDate: period.endDate,
-          days: period.days
-        },
-        inletDetails: inletResults,
-        outletDetails: outletResults
-      }]
-    });
-    
-  } catch (error) {
-    console.error('Error in water-balance-summary:', error);
-    res.status(500).json({ error: error.message, stack: error.stack });
-  }
- });
 // ============= START SERVER =============
-const PORT = process.env.PORT || 8000;
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`\n✅ Water Utility Backend running on port ${PORT}`);
   console.log('📊 API available at http://localhost:' + PORT + '/api');
   console.log('🗄️  Database: MongoDB');
-  console.log('\n📌 Available endpoints:');
-  console.log('   GET  /api/health');
-  console.log('   GET  /api/test');
-  console.log('   GET  /api/test-endpoints');
-  console.log('   GET  /api/bulk-readings');
-  console.log('   POST /api/bulk-readings');
-  console.log('   GET  /api/months');
-  console.log('   GET  /api/customers');
-  console.log('   GET  /api/reading-history');
-  console.log('   GET  /api/dma/history\n');
+  
+  // Initialize users after server starts
+  setTimeout(() => initializeDefaultUsers(), 2000);
 });
