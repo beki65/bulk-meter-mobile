@@ -15,10 +15,12 @@ const PORT = process.env.PORT || 8000;
 const JWT_SECRET = process.env.JWT_SECRET || 'water-utility-secret-key-2026';
 
 // ============= DATABASE CONNECTION =============
+// ============= DATABASE CONNECTION =============
 const connectDB = async () => {
   try {
-    await mongoose.connect('mongodb://localhost:27017/water-utility');
-    console.log('✅ MongoDB Connected: localhost');
+    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/water-utility';
+    await mongoose.connect(mongoURI);
+    console.log('✅ MongoDB Connected');
   } catch (error) {
     console.error('MongoDB connection error:', error);
     process.exit(1);
