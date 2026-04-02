@@ -43,6 +43,14 @@ export default function CustomerHistory({ dmaList = [] }) {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
 
+  // Helper to get auth token
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return {
+      headers: { Authorization: `Bearer ${token}` }
+    };
+  };
+
   useEffect(() => {
     fetchAvailableMonths();
   }, []);
@@ -56,7 +64,7 @@ export default function CustomerHistory({ dmaList = [] }) {
 
   const fetchAvailableMonths = async () => {
     try {
-      const response = await axios.get(`${API_URL}/months`);
+      const response = await axios.get(`${API_URL}/months`, getAuthHeaders());
       setAvailableMonths(response.data);
       if (response.data.length > 0) {
         setSelectedMonth(response.data[0].label);
@@ -86,7 +94,8 @@ export default function CustomerHistory({ dmaList = [] }) {
           limit: 50,
           ...(filters.minConsumption && { minConsumption: filters.minConsumption }),
           ...(filters.zeroConsumption && { zeroConsumption: 'true' })
-        }
+        },
+        ...getAuthHeaders()
       });
       
       setCustomers(response.data.customers);
@@ -119,7 +128,7 @@ export default function CustomerHistory({ dmaList = [] }) {
   const handleViewHistory = async (customer) => {
     setSelectedCustomer(customer);
     try {
-      const response = await axios.get(`${API_URL}/customers/${customer.id}/history`);
+      const response = await axios.get(`${API_URL}/customers/${customer.id}/history`, getAuthHeaders());
       setCustomerHistory(response.data.history || []);
       setChartDialogOpen(true);
     } catch (err) {
@@ -206,7 +215,7 @@ export default function CustomerHistory({ dmaList = [] }) {
             >
               {availableMonths.map((month) => (
                 <MenuItem key={month.label} value={month.label}>
-                  {month.label} ({month.count.toLocaleString()} records)
+                  {month.label} ({month.count?.toLocaleString() || 0} records)
                 </MenuItem>
               ))}
             </Select>
@@ -254,7 +263,7 @@ export default function CustomerHistory({ dmaList = [] }) {
             <Card sx={{ bgcolor: '#e3f2fd' }}>
               <CardContent>
                 <Typography variant="caption">Total Customers</Typography>
-                <Typography variant="h6">{stats.totalCustomers.toLocaleString()}</Typography>
+                <Typography variant="h6">{stats.totalCustomers?.toLocaleString() || 0}</Typography>
               </CardContent>
             </Card>
           </Grid>
@@ -262,7 +271,7 @@ export default function CustomerHistory({ dmaList = [] }) {
             <Card sx={{ bgcolor: '#fff3e0' }}>
               <CardContent>
                 <Typography variant="caption">Zero Consumption</Typography>
-                <Typography variant="h6" color="error.main">{stats.zeroConsumption.toLocaleString()}</Typography>
+                <Typography variant="h6" color="error.main">{stats.zeroConsumption?.toLocaleString() || 0}</Typography>
               </CardContent>
             </Card>
           </Grid>
@@ -270,7 +279,7 @@ export default function CustomerHistory({ dmaList = [] }) {
             <Card sx={{ bgcolor: '#e8f5e8' }}>
               <CardContent>
                 <Typography variant="caption">&gt;100m³</Typography>
-                <Typography variant="h6" color="warning.main">{stats.highConsumption.toLocaleString()}</Typography>
+                <Typography variant="h6" color="warning.main">{stats.highConsumption?.toLocaleString() || 0}</Typography>
               </CardContent>
             </Card>
           </Grid>
@@ -278,7 +287,7 @@ export default function CustomerHistory({ dmaList = [] }) {
             <Card sx={{ bgcolor: '#f3e5f5' }}>
               <CardContent>
                 <Typography variant="caption">Average Consumption</Typography>
-                <Typography variant="h6">{stats.averageConsumption.toFixed(1)} m³</Typography>
+                <Typography variant="h6">{stats.averageConsumption?.toFixed(1) || 0} m³</Typography>
               </CardContent>
             </Card>
           </Grid>

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../config';
 
 const AuthContext = createContext();
 
@@ -46,7 +47,7 @@ export const AuthProvider = ({ children }) => {
   
   const fetchUser = async () => {
     try {
-      const response = await axios.get('/api/auth/me');
+      const response = await axios.get(`${API_URL}/auth/me`);
       setUser(response.data);
       resetInactivityTimer();
     } catch (error) {
@@ -59,7 +60,7 @@ export const AuthProvider = ({ children }) => {
   
   const login = async (username, password, rememberMe = false) => {
     try {
-      const response = await axios.post('/api/auth/login', {
+      const response = await axios.post(`${API_URL}/auth/login`, {
         username,
         password,
         rememberMe
@@ -68,6 +69,7 @@ export const AuthProvider = ({ children }) => {
       const { token, user, requirePasswordChange, userId } = response.data;
       
       if (requirePasswordChange) {
+        localStorage.setItem('tempUserId', userId);
         return { requirePasswordChange: true, userId };
       }
       
@@ -80,18 +82,31 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
       
     } catch (error) {
+      console.error('Login error:', error.response?.data);
       return { error: error.response?.data?.error || 'Login failed' };
     }
   };
   
   const changePassword = async (currentPassword, newPassword) => {
     try {
-      await axios.post('/api/auth/change-password', {
+      const tempUserId = localStorage.getItem('tempUserId');
+      const config = {};
+      
+      if (token) {
+        config.headers = { 'Authorization': `Bearer ${token}` };
+      }
+      
+      const response = await axios.post(`${API_URL}/auth/change-password`, {
         currentPassword,
-        newPassword
-      });
+        newPassword,
+        userId: tempUserId
+      }, config);
+      
+      localStorage.removeItem('tempUserId');
+      
       return { success: true };
     } catch (error) {
+      console.error('Change password error:', error.response?.data);
       return { error: error.response?.data?.error || 'Failed to change password' };
     }
   };
@@ -99,7 +114,7 @@ export const AuthProvider = ({ children }) => {
   const logout = async (message) => {
     try {
       if (token) {
-        await axios.post('/api/auth/logout');
+        await axios.post(`${API_URL}/auth/logout`);
       }
     } catch (error) {
       console.error('Logout error:', error);

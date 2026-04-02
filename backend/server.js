@@ -29,22 +29,21 @@ const connectDB = async () => {
 connectDB();
 
 // ============= MIDDLEWARE =============
+// ============= MIDDLEWARE =============
 const corsOptions = {
   origin: [
     'http://localhost:3000',
     'http://localhost:3001',
-    'capacitor://localhost',
-    'ionic://localhost',
-    'https://localhost',
-    'http://localhost',
-    'https://bulk-meter-mobile.onrender.com',
-    'https://dmadashboard.netlify.app'
+    'https://dmadashboard.netlify.app',
+    'https://bulk-meter-mobile.onrender.com'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
   credentials: true,
   optionsSuccessStatus: 200
 };
+
+
 
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
@@ -325,21 +324,42 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
+app.post('/api/auth/change-password', async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
-    const user = await User.findById(req.user.userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const { currentPassword, newPassword, userId } = req.body;
     
-    let isValid = (currentPassword === 'AAWSA' && user.isFirstLogin) || await bcrypt.compare(currentPassword, user.password);
-    if (!isValid) return res.status(401).json({ error: 'Current password is incorrect' });
+    // For first login, we might not have token, so accept userId from body
+    let user;
+    if (req.user) {
+      user = await User.findById(req.user.userId);
+    } else if (userId) {
+      user = await User.findById(userId);
+    }
     
-    user.password = await bcrypt.hash(newPassword, 10);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    let isValid = false;
+    if (currentPassword === 'AAWSA' && user.isFirstLogin) {
+      isValid = true;
+    } else {
+      isValid = await bcrypt.compare(currentPassword, user.password);
+    }
+    
+    if (!isValid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+    
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
     user.isFirstLogin = false;
     await user.save();
     
     res.json({ success: true });
+    
   } catch (error) {
+    console.error('Change password error:', error);
     res.status(500).json({ error: 'Failed to change password' });
   }
 });

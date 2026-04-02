@@ -28,7 +28,7 @@ import NRWCalculator from '../components/NRWCalculator';
 import CustomerHistory from '../components/CustomerHistory';
 import About from '../components/About';
 import DMAConsumptionAnalytics from '../components/DMAConsumptionAnalytics';
-
+import { API_URL } from '../config';
 // Default DMAs (used as fallback)
 const DEFAULT_DMAS = [
   {
@@ -83,8 +83,8 @@ const DEFAULT_DMAS = [
   }
 ];
 
-const API_URL = 'http://192.168.1.115:8000/api';
-
+//const API_URL = 'http://192.168.1.115:8000/api';
+const API_URL = 'http://localhost:8000/api';
 export default function DMAHistory() {
   const [viewMode, setViewMode] = useState('cards');
   const [dmaData, setDmaData] = useState({ zones: DEFAULT_DMAS });
