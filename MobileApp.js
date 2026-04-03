@@ -241,7 +241,7 @@ function MobileApp() {
       return;
     }
 
-    const API_URL = 'http://192.168.1.111:8000/api';
+    const API_URL = 'http://192.168.1.216:8000/api';
     let successCount = 0;
 
     for (const reading of unsynced) {
