@@ -32,6 +32,8 @@ connectDB();
 // ============= MIDDLEWARE =============
 const corsOptions = {
   origin: [
+    'http://localhost',
+    'capacitor://localhost',
     'http://localhost:3000',
     'http://localhost:3001',
     'https://dmadashboard.netlify.app',

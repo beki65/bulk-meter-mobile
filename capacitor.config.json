@@ -4,7 +4,6 @@
   "webDir": "build",
   "bundledWebRuntime": false,
   "server": {
-    "url": "https://bulk-meter-mobile.onrender.com",
     "cleartext": true
   },
   "android": {
