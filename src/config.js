@@ -8,5 +8,5 @@ const ENV = {
   }
 };
 
-// Use development for local testing
-export const API_URL = ENV.development.API_URL;
+// Use production for the mobile app
+export const API_URL = ENV.production.API_URL;
