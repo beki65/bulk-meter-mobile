@@ -266,6 +266,22 @@ const ReadingHistorySchema = new mongoose.Schema({
 
 const ReadingHistory = mongoose.models.ReadingHistory || mongoose.model('ReadingHistory', ReadingHistorySchema);
 
+// ============= BULK READINGS SYNC =============
+app.post('/api/bulk-readings', async (req, res) => {
+  try {
+    const data = req.body;
+    const newReading = new Reading({
+      ...data,
+      source: 'mobile'
+    });
+    await newReading.save();
+    res.status(201).json({ success: true, reading: newReading });
+  } catch (error) {
+    console.error('Error saving bulk reading:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============= CALENDAR PERIODS =============
 const CALENDAR_PERIODS = {
   '2026-january': { id: '2026-january', name: 'January 2026', month: 'january', year: 2026, startDate: '2025-12-15', endDate: '2026-01-13', days: 30 },
