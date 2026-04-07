@@ -20,13 +20,19 @@ jobs:
     - uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '17'
+        java-version: '17'  # Keep at 17
     - uses: android-actions/setup-android@v3
     - run: npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/camera @capacitor/geolocation
     - run: npx cap init "Bulk Meter" "com.bulkmeter.app" --web-dir=build
     - run: npx cap add android
     - run: npx cap sync
-    - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+    - run: |
+        cd android
+        chmod +x gradlew
+        # Set Java compatibility to 17
+        echo "android.compileOptions.sourceCompatibility = JavaVersion.VERSION_17" >> app/build.gradle
+        echo "android.compileOptions.targetCompatibility = JavaVersion.VERSION_17" >> app/build.gradle
+        ./gradlew assembleDebug
     - uses: actions/upload-artifact@v4
       with:
         name: app-debug
