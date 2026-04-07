@@ -25,12 +25,12 @@ import {
   BottomNavigationAction,
   Badge,
   Chip,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Switch,
-  Divider
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Grid,
+  LinearProgress
 } from '@mui/material';
 import {
   CameraAlt as CameraIcon,
@@ -41,16 +41,13 @@ import {
   Sync as SyncIcon,
   WifiOff as OfflineIcon,
   Delete as DeleteIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  NetworkCheck as NetworkIcon
 } from '@mui/icons-material';
-import { getDistance } from 'geolib';
 import localforage from 'localforage';
 import axios from 'axios';
 import { Camera } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
-import { Network } from '@capacitor/network';
 
 // Configure localforage
 localforage.config({
@@ -60,57 +57,45 @@ localforage.config({
 
 const theme = createTheme({
   palette: {
-    primary: {
-      main: '#1e3a8a',
-    },
-    secondary: {
-      main: '#f57c00',
-    },
+    primary: { main: '#1e3a8a' },
+    secondary: { main: '#f57c00' },
   },
-  typography: {
-    fontSize: 14, // Larger for mobile
-  },
+  typography: { fontSize: 14 },
 });
 
-// DMA configurations (same as before)
+// DMA configurations
 const dmaConfigs = {
   'Jafar': {
     id: 'DMA-JFR',
-    inlets: [
-      { name: 'Bulk Didly', size: '4"' },
-      { name: 'Shemachoch', size: '3"' }
-    ],
-    outlets: [
-      { name: 'Tel', size: '6"' }
-    ]
+    inlets: [{ name: 'Bulk Didly', size: '4"' }, { name: 'Shemachoch', size: '3"' }],
+    outlets: [{ name: 'Tel', size: '6"' }]
   },
   'Yeka': {
     id: 'DMA-YKA',
-    inlets: [
-      { name: 'Misrak', size: '4"' },
-      { name: 'English', size: '3"' },
-      { name: 'Wubet', size: '2.5"' }
-    ],
+    inlets: [{ name: 'Misrak', size: '4"' }, { name: 'English', size: '3"' }, { name: 'Wubet', size: '2.5"' }],
     outlets: []
   },
   '2019 DMA': {
     id: 'DMA-2019',
-    inlets: [
-      { name: 'Inlet 1', size: 'Unknown' },
-      { name: 'Inlet 2', size: 'Unknown' }
-    ],
+    inlets: [{ name: 'Inlet 1', size: 'Unknown' }, { name: 'Inlet 2', size: 'Unknown' }],
     outlets: []
   }
 };
 
+// Get saved API URL or use default
+const getSavedApiUrl = () => {
+  const saved = localStorage.getItem('api_url');
+  return saved || 'https://bulk-meter-mobile.onrender.com/api';
+};
+
+const saveApiUrl = (url) => {
+  localStorage.setItem('api_url', url);
+};
+
 function MobileApp() {
-  const [currentScreen, setCurrentScreen] = useState('capture'); // capture, history, settings
+  const [currentScreen, setCurrentScreen] = useState('capture');
   const [formData, setFormData] = useState({
-    dma: '',
-    inlet: '',
-    size: '',
-    meterReading: '',
-    notes: ''
+    dma: '', inlet: '', size: '', meterReading: '', notes: ''
   });
   const [gps, setGps] = useState({ lat: null, lng: null, accuracy: null, loading: false });
   const [savedReadings, setSavedReadings] = useState([]);
@@ -118,15 +103,19 @@ function MobileApp() {
   const [offline, setOffline] = useState(!navigator.onLine);
   const [syncing, setSyncing] = useState(false);
   const [photo, setPhoto] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [apiUrl, setApiUrl] = useState(getSavedApiUrl());
+  const [customUrl, setCustomUrl] = useState(apiUrl);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState(null);
+  const [discovering, setDiscovering] = useState(false);
 
   // Network status monitoring
   useEffect(() => {
     const handleOnline = () => setOffline(false);
     const handleOffline = () => setOffline(true);
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -143,25 +132,20 @@ function MobileApp() {
     await localforage.iterate((value, key) => {
       readings.push({ id: key, ...value });
     });
-    setSavedReadings(readings.sort((a, b) => 
-      new Date(b.timestamp) - new Date(a.timestamp)
-    ));
+    setSavedReadings(readings.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
   };
 
   const showSnackbar = (message, severity = 'success') => {
     setSnackbar({ open: true, message, severity });
   };
 
-  // Capture GPS
   const captureGps = async () => {
     setGps(prev => ({ ...prev, loading: true }));
-
     try {
       const position = await Geolocation.getCurrentPosition({
         enableHighAccuracy: true,
         timeout: 10000
       });
-      
       setGps({
         lat: position.coords.latitude,
         lng: position.coords.longitude,
@@ -175,7 +159,6 @@ function MobileApp() {
     }
   };
 
-  // Take photo
   const takePhoto = async () => {
     try {
       const image = await Camera.getPhoto({
@@ -190,12 +173,13 @@ function MobileApp() {
     }
   };
 
-  // Save reading
   const saveReading = async () => {
     if (!formData.dma || !formData.inlet || !formData.meterReading) {
       showSnackbar('Please fill all required fields', 'error');
       return;
     }
+
+    const isOutlet = dmaConfigs[formData.dma]?.outlets.some(o => o.name === formData.inlet);
 
     const readingData = {
       ...formData,
@@ -205,19 +189,17 @@ function MobileApp() {
       photo: photo,
       timestamp: new Date().toISOString(),
       date: new Date().toISOString().split('T')[0],
-      synced: false
+      synced: false,
+      isOutlet: isOutlet
     };
 
     const id = Date.now().toString();
     await localforage.setItem(id, readingData);
-
     showSnackbar(offline ? 'Saved offline - will sync when online' : 'Saved locally');
     
-    // Reset form
     setFormData({ dma: '', inlet: '', size: '', meterReading: '', notes: '' });
     setGps({ lat: null, lng: null, accuracy: null, loading: false });
     setPhoto(null);
-    
     loadSavedReadings();
 
     if (!offline) {
@@ -225,7 +207,6 @@ function MobileApp() {
     }
   };
 
-  // Sync with server
   const syncWithServer = async () => {
     if (offline) {
       showSnackbar('Cannot sync while offline', 'warning');
@@ -241,7 +222,6 @@ function MobileApp() {
       return;
     }
 
-    const API_URL = 'http://192.168.1.111:8000/api';
     let successCount = 0;
 
     for (const reading of unsynced) {
@@ -250,38 +230,120 @@ function MobileApp() {
         if (reading.dma === 'Jafar') dmaId = 'DMA-JFR';
         if (reading.dma === 'Yeka') dmaId = 'DMA-YKA';
 
-       const response = await axios.post(`${API_URL}/bulk-readings`, {
-        dmaId: dmaId,
-        pointName: reading.inlet,  // ← Changed from inletName
-        meterReading: parseFloat(reading.meterReading) || 0,
-       size: reading.size || 'Unknown',
-        notes: reading.notes || '',
-        latitude: reading.gps?.lat || null,
-        longitude: reading.gps?.lng || null,
-        timestamp: reading.timestamp || new Date().toISOString(),
-        date: reading.date || new Date().toISOString().split('T')[0],
-        pointType: reading.isOutlet ? 'outlet' : 'inlet'  // ← Add this
-      });
+        const response = await axios.post(`${apiUrl}/bulk-readings`, {
+          dmaId: dmaId,
+          pointName: reading.inlet,
+          meterReading: parseFloat(reading.meterReading) || 0,
+          size: reading.size || 'Unknown',
+          notes: reading.notes || '',
+          latitude: reading.gps?.lat || null,
+          longitude: reading.gps?.lng || null,
+          timestamp: reading.timestamp || new Date().toISOString(),
+          date: reading.date || new Date().toISOString().split('T')[0],
+          pointType: reading.isOutlet ? 'outlet' : 'inlet'
+        });
 
-        if (response.status === 201) {
+        if (response.status === 201 || response.status === 200) {
           const updated = { ...reading, synced: true };
           await localforage.setItem(reading.id, updated);
           successCount++;
+          console.log(`✅ Synced: ${reading.inlet} - ${reading.meterReading} m³`);
         }
       } catch (error) {
-        console.error('Sync failed:', error);
+        console.error('❌ Sync failed:', error.response?.data || error.message);
       }
     }
 
     setSyncing(false);
     await loadSavedReadings();
-    showSnackbar(`Synced ${successCount} of ${unsynced.length} readings`);
+    showSnackbar(`Synced ${successCount} of ${unsynced.length} readings`, successCount > 0 ? 'success' : 'error');
   };
 
-  // Render capture screen
+  const deleteReading = async (id) => {
+    await localforage.removeItem(id);
+    loadSavedReadings();
+    showSnackbar('Reading deleted');
+  };
+
+  const testConnection = async (url) => {
+    setTestingConnection(true);
+    setConnectionStatus(null);
+    try {
+      const response = await axios.get(`${url}/health`, { timeout: 5000 });
+      if (response.data && response.data.status === 'OK') {
+        setConnectionStatus({ success: true, message: 'Connection successful!' });
+        return true;
+      }
+      setConnectionStatus({ success: false, message: 'Invalid response from server' });
+      return false;
+    } catch (error) {
+      setConnectionStatus({ success: false, message: `Connection failed: ${error.message}` });
+      return false;
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const applyApiUrl = async () => {
+    const isValid = await testConnection(customUrl);
+    if (isValid) {
+      saveApiUrl(customUrl);
+      setApiUrl(customUrl);
+      setSettingsOpen(false);
+      showSnackbar('API URL updated successfully!', 'success');
+      // Reload readings to check connection
+      loadSavedReadings();
+    }
+  };
+
+  const discoverServer = async () => {
+    setDiscovering(true);
+    setConnectionStatus(null);
+    
+    // Try common local IP ranges
+    const commonPrefixes = ['192.168.1.', '192.168.0.', '10.0.0.', '172.16.'];
+    let found = false;
+    
+    for (const prefix of commonPrefixes) {
+      for (let i = 1; i <= 20; i++) {
+        const testIp = `${prefix}${i}`;
+        const testUrl = `http://${testIp}:8000/api`;
+        
+        try {
+          const response = await axios.get(`${testUrl}/health`, { timeout: 1000 });
+          if (response.data && response.data.status === 'OK') {
+            setCustomUrl(testUrl);
+            setConnectionStatus({ success: true, message: `Found server at ${testIp}!` });
+            found = true;
+            break;
+          }
+        } catch (error) {
+          // Continue scanning
+        }
+      }
+      if (found) break;
+    }
+    
+    if (!found) {
+      setConnectionStatus({ success: false, message: 'Could not find server. Make sure backend is running.' });
+    }
+    setDiscovering(false);
+  };
+
   const renderCaptureScreen = () => (
     <Box sx={{ p: 2 }}>
-      {/* DMA Selection */}
+      <Paper sx={{ p: 1, mb: 2, bgcolor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box display="flex" alignItems="center">
+          <NetworkIcon sx={{ mr: 1, color: offline ? 'error.main' : 'success.main' }} />
+          <Typography variant="caption">
+            {offline ? 'Offline' : apiUrl.split('/')[2] || 'Connected'}
+          </Typography>
+        </Box>
+        <IconButton size="small" onClick={() => setSettingsOpen(true)}>
+          <SettingsIcon fontSize="small" />
+        </IconButton>
+      </Paper>
+
       <FormControl fullWidth sx={{ mb: 2 }}>
         <InputLabel>DMA Zone</InputLabel>
         <Select
@@ -295,7 +357,6 @@ function MobileApp() {
         </Select>
       </FormControl>
 
-      {/* Inlet Selection */}
       {formData.dma && (
         <FormControl fullWidth sx={{ mb: 2 }}>
           <InputLabel>Inlet/Outlet</InputLabel>
@@ -312,20 +373,15 @@ function MobileApp() {
             }}
           >
             {dmaConfigs[formData.dma].inlets.map(inlet => (
-              <MenuItem key={inlet.name} value={inlet.name}>
-                📥 {inlet.name}
-              </MenuItem>
+              <MenuItem key={inlet.name} value={inlet.name}>📥 {inlet.name}</MenuItem>
             ))}
             {dmaConfigs[formData.dma].outlets.map(outlet => (
-              <MenuItem key={outlet.name} value={outlet.name}>
-                📤 {outlet.name}
-              </MenuItem>
+              <MenuItem key={outlet.name} value={outlet.name}>📤 {outlet.name}</MenuItem>
             ))}
           </Select>
         </FormControl>
       )}
 
-      {/* Meter Reading */}
       <TextField
         fullWidth
         label="Meter Reading (m³)"
@@ -336,7 +392,6 @@ function MobileApp() {
         autoFocus
       />
 
-      {/* Size Selection */}
       <FormControl fullWidth sx={{ mb: 2 }}>
         <InputLabel>Bulk Size</InputLabel>
         <Select
@@ -350,7 +405,6 @@ function MobileApp() {
         </Select>
       </FormControl>
 
-      {/* Notes */}
       <TextField
         fullWidth
         label="Notes"
@@ -361,7 +415,6 @@ function MobileApp() {
         sx={{ mb: 2 }}
       />
 
-      {/* Action Buttons */}
       <Grid container spacing={1} sx={{ mb: 2 }}>
         <Grid item xs={6}>
           <Button
@@ -388,19 +441,11 @@ function MobileApp() {
         </Grid>
       </Grid>
 
-      {/* Status Display */}
       {gps.lat && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          📍 GPS Locked
-        </Alert>
+        <Alert severity="success" sx={{ mb: 2 }}>📍 GPS Locked (accuracy: ±{Math.round(gps.accuracy)}m)</Alert>
       )}
-      {photo && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          📸 Photo captured
-        </Alert>
-      )}
+      {photo && <Alert severity="success" sx={{ mb: 2 }}>📸 Photo captured</Alert>}
 
-      {/* Save Button */}
       <Button
         fullWidth
         variant="contained"
@@ -414,7 +459,6 @@ function MobileApp() {
     </Box>
   );
 
-  // Render history screen
   const renderHistoryScreen = () => (
     <Box sx={{ p: 2 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -425,9 +469,11 @@ function MobileApp() {
           onClick={syncWithServer}
           disabled={syncing || offline}
         >
-          {syncing ? 'Syncing...' : 'Sync'}
+          {syncing ? <CircularProgress size={20} /> : 'Sync All'}
         </Button>
       </Box>
+
+      {syncing && <LinearProgress sx={{ mb: 2 }} />}
 
       {savedReadings.length === 0 ? (
         <Alert severity="info">No readings saved</Alert>
@@ -435,23 +481,30 @@ function MobileApp() {
         savedReadings.map((reading) => (
           <Card key={reading.id} sx={{ mb: 2 }}>
             <CardContent>
-              <Typography variant="subtitle2">
-                {reading.dma} - {reading.inlet}
-              </Typography>
-              <Typography variant="body2">
-                Reading: {reading.meterReading} m³
-              </Typography>
-              <Typography variant="caption" color="textSecondary">
-                {new Date(reading.timestamp).toLocaleString()}
-              </Typography>
-              {!reading.synced && (
-                <Chip
-                  size="small"
-                  label="Pending"
-                  color="warning"
-                  sx={{ mt: 1 }}
-                />
-              )}
+              <Box display="flex" justifyContent="space-between">
+                <Box>
+                  <Typography variant="subtitle2">
+                    {reading.dma} - {reading.inlet}
+                  </Typography>
+                  <Typography variant="body2">
+                    Reading: {reading.meterReading} m³
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    {new Date(reading.timestamp).toLocaleString()}
+                  </Typography>
+                  {reading.gps && (
+                    <Typography variant="caption" display="block" color="textSecondary">
+                      📍 {reading.gps.lat.toFixed(4)}, {reading.gps.lng.toFixed(4)}
+                    </Typography>
+                  )}
+                </Box>
+                <Box display="flex" alignItems="center">
+                  {!reading.synced && <Chip size="small" label="Pending" color="warning" sx={{ mr: 1 }} />}
+                  <IconButton size="small" onClick={() => deleteReading(reading.id)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              </Box>
             </CardContent>
           </Card>
         ))
@@ -459,16 +512,13 @@ function MobileApp() {
     </Box>
   );
 
-  // Main render
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ pb: 7, minHeight: '100vh', bgcolor: '#f5f5f5' }}>
         <AppBar position="sticky">
           <Toolbar>
-            <Typography variant="h6" sx={{ flexGrow: 1 }}>
-              📱 Bulk Meter
-            </Typography>
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>📱 Bulk Meter</Typography>
             {offline && <OfflineIcon />}
           </Toolbar>
         </AppBar>
@@ -483,25 +533,88 @@ function MobileApp() {
           onChange={(e, newValue) => setCurrentScreen(newValue)}
           sx={{ position: 'fixed', bottom: 0, left: 0, right: 0 }}
         >
-          <BottomNavigationAction
-            label="Capture"
-            value="capture"
-            icon={<HomeIcon />}
-          />
+          <BottomNavigationAction label="Capture" value="capture" icon={<HomeIcon />} />
           <BottomNavigationAction
             label="History"
             value="history"
             icon={
-              <Badge
-                color="primary"
-                variant="dot"
-                invisible={!savedReadings.some(r => !r.synced)}
-              >
+              <Badge color="primary" variant="dot" invisible={!savedReadings.some(r => !r.synced)}>
                 <HistoryIcon />
               </Badge>
             }
           />
         </BottomNavigation>
+
+        {/* Settings Dialog */}
+        <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>API Server Settings</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              Current Server: <strong>{apiUrl}</strong>
+            </Typography>
+            
+            <TextField
+              fullWidth
+              label="Custom API URL"
+              value={customUrl}
+              onChange={(e) => setCustomUrl(e.target.value)}
+              placeholder="http://192.168.1.100:8000/api"
+              margin="normal"
+              helperText="For local testing: http://YOUR_COMPUTER_IP:8000/api"
+            />
+            
+            <Box display="flex" gap={1} sx={{ mt: 2, mb: 2 }}>
+              <Button variant="outlined" onClick={() => testConnection(customUrl)} disabled={testingConnection}>
+                {testingConnection ? <CircularProgress size={20} /> : 'Test Connection'}
+              </Button>
+              <Button variant="contained" onClick={applyApiUrl}>
+                Apply & Save
+              </Button>
+            </Box>
+
+            <Button 
+              fullWidth 
+              variant="outlined" 
+              onClick={discoverServer} 
+              disabled={discovering}
+              startIcon={<NetworkIcon />}
+              sx={{ mb: 2 }}
+            >
+              {discovering ? <CircularProgress size={20} /> : '🔍 Auto-Discover Server'}
+            </Button>
+
+            {connectionStatus && (
+              <Alert severity={connectionStatus.success ? 'success' : 'error'} sx={{ mt: 2 }}>
+                {connectionStatus.message}
+              </Alert>
+            )}
+
+            <Divider sx={{ my: 2 }} />
+            
+            <Typography variant="subtitle2" gutterBottom>Quick Presets:</Typography>
+            <Box display="flex" gap={1} flexWrap="wrap">
+              <Button size="small" variant="outlined" onClick={() => setCustomUrl('https://bulk-meter-mobile.onrender.com/api')}>
+                Production
+              </Button>
+              <Button size="small" variant="outlined" onClick={() => setCustomUrl('http://10.0.2.2:8000/api')}>
+                Android Emulator
+              </Button>
+              <Button size="small" variant="outlined" onClick={() => setCustomUrl('http://localhost:8000/api')}>
+                Localhost
+              </Button>
+            </Box>
+            
+            <Alert severity="info" sx={{ mt: 2 }}>
+              <Typography variant="caption">
+                💡 To find your computer's IP: Run 'ipconfig' in Command Prompt<br/>
+                Make sure your backend is running on port 8000
+              </Typography>
+            </Alert>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSettingsOpen(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
 
         <Snackbar
           open={snackbar.open}
