@@ -1,6 +1,6 @@
 {
-  "appId": "com.beki65.bulkmeter",
-  "appName": "Bulk Meter Test",
+  "appId": "com.bulkmeter.app",
+  "appName": "Bulk Meter",
   "webDir": "build",
   "bundledWebRuntime": false
 }

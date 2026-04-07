@@ -30,7 +30,12 @@ import {
   DialogContent,
   DialogActions,
   Grid,
-  LinearProgress
+  LinearProgress,
+  Divider,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction
 } from '@mui/material';
 import {
   CameraAlt as CameraIcon,
@@ -42,7 +47,10 @@ import {
   WifiOff as OfflineIcon,
   Delete as DeleteIcon,
   Settings as SettingsIcon,
-  NetworkCheck as NetworkIcon
+  NetworkCheck as NetworkIcon,
+  Refresh as RefreshIcon,
+  Computer as ComputerIcon,
+  CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
 import localforage from 'localforage';
 import axios from 'axios';
@@ -92,6 +100,16 @@ const saveApiUrl = (url) => {
   localStorage.setItem('api_url', url);
 };
 
+// Get saved server list
+const getSavedServers = () => {
+  const saved = localStorage.getItem('discovered_servers');
+  return saved ? JSON.parse(saved) : [];
+};
+
+const saveServers = (servers) => {
+  localStorage.setItem('discovered_servers', JSON.stringify(servers));
+};
+
 function MobileApp() {
   const [currentScreen, setCurrentScreen] = useState('capture');
   const [formData, setFormData] = useState({
@@ -109,6 +127,10 @@ function MobileApp() {
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [discovering, setDiscovering] = useState(false);
+  const [availableServers, setAvailableServers] = useState([]);
+  const [scanning, setScanning] = useState(false);
+  const [selectedServer, setSelectedServer] = useState(null);
+  const [showServerList, setShowServerList] = useState(false);
 
   // Network status monitoring
   useEffect(() => {
@@ -116,6 +138,13 @@ function MobileApp() {
     const handleOffline = () => setOffline(true);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    
+    // Load saved servers on startup
+    const savedServers = getSavedServers();
+    if (savedServers.length > 0) {
+      setAvailableServers(savedServers);
+    }
+    
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -291,43 +320,119 @@ function MobileApp() {
       setApiUrl(customUrl);
       setSettingsOpen(false);
       showSnackbar('API URL updated successfully!', 'success');
-      // Reload readings to check connection
       loadSavedReadings();
     }
   };
 
-  const discoverServer = async () => {
-    setDiscovering(true);
+  // Enhanced multi-server discovery
+  const discoverServers = async () => {
+    setScanning(true);
     setConnectionStatus(null);
+    setShowServerList(true);
     
-    // Try common local IP ranges
+    const foundServers = [];
+    
+    // Method 1: Try mDNS/Bonjour names
+    const commonNames = [
+      'waterutility.local',
+      'backend.local',
+      'server.local',
+      'laptop.local',
+      'desktop.local',
+      'WaterUtilityBackend.local'
+    ];
+    
+    for (const name of commonNames) {
+      const testUrl = `http://${name}:3001/api/discover`;
+      try {
+        const response = await axios.get(testUrl, { timeout: 1500 });
+        if (response.data && response.data.computerName) {
+          foundServers.push({
+            name: response.data.computerName,
+            ip: response.data.mainIp,
+            url: `http://${response.data.mainIp}:8000/api`,
+            discoveryUrl: testUrl,
+            status: 'online',
+            lastSeen: new Date().toISOString()
+          });
+        }
+      } catch (error) {
+        // Continue scanning
+      }
+    }
+    
+    // Method 2: Scan IP ranges
     const commonPrefixes = ['192.168.1.', '192.168.0.', '10.0.0.', '172.16.'];
-    let found = false;
     
     for (const prefix of commonPrefixes) {
-      for (let i = 1; i <= 20; i++) {
+      for (let i = 1; i <= 30; i++) {
         const testIp = `${prefix}${i}`;
-        const testUrl = `http://${testIp}:8000/api`;
+        const discoverUrl = `http://${testIp}:3001/api/discover`;
         
         try {
-          const response = await axios.get(`${testUrl}/health`, { timeout: 1000 });
-          if (response.data && response.data.status === 'OK') {
-            setCustomUrl(testUrl);
-            setConnectionStatus({ success: true, message: `Found server at ${testIp}!` });
-            found = true;
-            break;
+          const response = await axios.get(discoverUrl, { timeout: 800 });
+          if (response.data && response.data.computerName) {
+            // Check if already found
+            const exists = foundServers.some(s => s.ip === testIp);
+            if (!exists) {
+              foundServers.push({
+                name: response.data.computerName,
+                ip: testIp,
+                url: `http://${testIp}:8000/api`,
+                discoveryUrl: discoverUrl,
+                status: 'online',
+                lastSeen: new Date().toISOString(),
+                systemInfo: {
+                  os: response.data.os,
+                  uptime: response.data.uptime,
+                  memory: response.data.totalMemory
+                }
+              });
+            }
           }
         } catch (error) {
           // Continue scanning
         }
       }
-      if (found) break;
     }
     
-    if (!found) {
-      setConnectionStatus({ success: false, message: 'Could not find server. Make sure backend is running.' });
+    // Remove duplicates
+    const uniqueServers = [];
+    const seenIps = new Set();
+    for (const server of foundServers) {
+      if (!seenIps.has(server.ip)) {
+        seenIps.add(server.ip);
+        uniqueServers.push(server);
+      }
     }
-    setDiscovering(false);
+    
+    setAvailableServers(uniqueServers);
+    saveServers(uniqueServers);
+    setScanning(false);
+    
+    if (uniqueServers.length === 0) {
+      setConnectionStatus({ success: false, message: 'No servers found. Make sure backend is running on at least one computer.' });
+    } else {
+      setConnectionStatus({ success: true, message: `Found ${uniqueServers.length} server(s)!` });
+    }
+  };
+
+  const connectToServer = async (server) => {
+    setCustomUrl(server.url);
+    setSelectedServer(server);
+    const isValid = await testConnection(server.url);
+    if (isValid) {
+      saveApiUrl(server.url);
+      setApiUrl(server.url);
+      setSettingsOpen(false);
+      setShowServerList(false);
+      showSnackbar(`Connected to ${server.name} at ${server.ip}`, 'success');
+      loadSavedReadings();
+    }
+  };
+
+  const refreshServerList = () => {
+    discoverServers();
   };
 
   const renderCaptureScreen = () => (
@@ -336,7 +441,7 @@ function MobileApp() {
         <Box display="flex" alignItems="center">
           <NetworkIcon sx={{ mr: 1, color: offline ? 'error.main' : 'success.main' }} />
           <Typography variant="caption">
-            {offline ? 'Offline' : apiUrl.split('/')[2] || 'Connected'}
+            {offline ? 'Offline' : (selectedServer ? `${selectedServer.name}` : apiUrl.split('/')[2] || 'Connected')}
           </Typography>
         </Box>
         <IconButton size="small" onClick={() => setSettingsOpen(true)}>
@@ -519,6 +624,9 @@ function MobileApp() {
         <AppBar position="sticky">
           <Toolbar>
             <Typography variant="h6" sx={{ flexGrow: 1 }}>📱 Bulk Meter</Typography>
+            <IconButton color="inherit" onClick={() => { setSettingsOpen(true); setShowServerList(true); }}>
+              <NetworkIcon />
+            </IconButton>
             {offline && <OfflineIcon />}
           </Toolbar>
         </AppBar>
@@ -545,13 +653,72 @@ function MobileApp() {
           />
         </BottomNavigation>
 
-        {/* Settings Dialog */}
-        <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>API Server Settings</DialogTitle>
+        {/* Settings Dialog with Server List */}
+        <Dialog open={settingsOpen} onClose={() => { setSettingsOpen(false); setShowServerList(false); }} maxWidth="sm" fullWidth>
+          <DialogTitle>
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+              <Typography variant="h6">Server Settings</Typography>
+              <IconButton onClick={refreshServerList} size="small">
+                <RefreshIcon />
+              </IconButton>
+            </Box>
+          </DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="textSecondary" gutterBottom>
-              Current Server: <strong>{apiUrl}</strong>
+              Current Server: <strong>{selectedServer ? selectedServer.name : apiUrl.split('/')[2] || 'None'}</strong>
             </Typography>
+            
+            <Button 
+              fullWidth 
+              variant="contained" 
+              onClick={discoverServers} 
+              disabled={scanning}
+              startIcon={scanning ? <CircularProgress size={20} /> : <NetworkIcon />}
+              sx={{ mb: 2 }}
+            >
+              {scanning ? 'Scanning Network...' : '🔍 Find Available Servers'}
+            </Button>
+
+            {showServerList && availableServers.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Available Servers ({availableServers.length})
+                </Typography>
+                <List sx={{ bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                  {availableServers.map((server, idx) => (
+                    <ListItem 
+                      key={idx} 
+                      button 
+                      onClick={() => connectToServer(server)}
+                      sx={{ 
+                        borderRadius: 1, 
+                        mb: 0.5,
+                        bgcolor: selectedServer?.ip === server.ip ? '#e3f2fd' : 'white'
+                      }}
+                    >
+                      <ComputerIcon sx={{ mr: 2, color: '#1e3a8a' }} />
+                      <ListItemText 
+                        primary={server.name}
+                        secondary={`IP: ${server.ip} | Port: 8000`}
+                      />
+                      {selectedServer?.ip === server.ip && (
+                        <CheckCircleIcon color="success" />
+                      )}
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+            )}
+
+            {connectionStatus && (
+              <Alert severity={connectionStatus.success ? 'success' : 'error'} sx={{ mt: 2, mb: 2 }}>
+                {connectionStatus.message}
+              </Alert>
+            )}
+
+            <Divider sx={{ my: 2 }} />
+            
+            <Typography variant="subtitle2" gutterBottom>Manual Configuration</Typography>
             
             <TextField
               fullWidth
@@ -560,37 +727,18 @@ function MobileApp() {
               onChange={(e) => setCustomUrl(e.target.value)}
               placeholder="http://192.168.1.100:8000/api"
               margin="normal"
-              helperText="For local testing: http://YOUR_COMPUTER_IP:8000/api"
+              size="small"
             />
             
-            <Box display="flex" gap={1} sx={{ mt: 2, mb: 2 }}>
-              <Button variant="outlined" onClick={() => testConnection(customUrl)} disabled={testingConnection}>
-                {testingConnection ? <CircularProgress size={20} /> : 'Test Connection'}
+            <Box display="flex" gap={1} sx={{ mt: 1, mb: 2 }}>
+              <Button variant="outlined" onClick={() => testConnection(customUrl)} disabled={testingConnection} size="small">
+                {testingConnection ? <CircularProgress size={20} /> : 'Test'}
               </Button>
-              <Button variant="contained" onClick={applyApiUrl}>
-                Apply & Save
+              <Button variant="contained" onClick={applyApiUrl} size="small">
+                Apply
               </Button>
             </Box>
 
-            <Button 
-              fullWidth 
-              variant="outlined" 
-              onClick={discoverServer} 
-              disabled={discovering}
-              startIcon={<NetworkIcon />}
-              sx={{ mb: 2 }}
-            >
-              {discovering ? <CircularProgress size={20} /> : '🔍 Auto-Discover Server'}
-            </Button>
-
-            {connectionStatus && (
-              <Alert severity={connectionStatus.success ? 'success' : 'error'} sx={{ mt: 2 }}>
-                {connectionStatus.message}
-              </Alert>
-            )}
-
-            <Divider sx={{ my: 2 }} />
-            
             <Typography variant="subtitle2" gutterBottom>Quick Presets:</Typography>
             <Box display="flex" gap={1} flexWrap="wrap">
               <Button size="small" variant="outlined" onClick={() => setCustomUrl('https://bulk-meter-mobile.onrender.com/api')}>
@@ -606,13 +754,15 @@ function MobileApp() {
             
             <Alert severity="info" sx={{ mt: 2 }}>
               <Typography variant="caption">
-                💡 To find your computer's IP: Run 'ipconfig' in Command Prompt<br/>
-                Make sure your backend is running on port 8000
+                💡 To find computers on your network:<br/>
+                1. Make sure backend is running on each computer<br/>
+                2. Click "Find Available Servers"<br/>
+                3. Select a server to connect
               </Typography>
             </Alert>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setSettingsOpen(false)}>Close</Button>
+            <Button onClick={() => { setSettingsOpen(false); setShowServerList(false); }}>Close</Button>
           </DialogActions>
         </Dialog>
 
