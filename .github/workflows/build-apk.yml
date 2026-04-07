@@ -10,29 +10,56 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    
     - uses: actions/setup-node@v4
       with:
-        node-version: '22'
+        node-version: '20'
+    
     - run: npm ci
     - run: npm run build
       env:
         CI: false
+    
     - uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '17'  # Keep at 17
-    - uses: android-actions/setup-android@v3
-    - run: npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/camera @capacitor/geolocation
-    - run: npx cap init "Bulk Meter" "com.bulkmeter.app" --web-dir=build
-    - run: npx cap add android
-    - run: npx cap sync
-    - run: |
+        java-version: '17'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Install Capacitor
+      run: |
+        npm install @capacitor/core@5 @capacitor/cli@5 @capacitor/android@5
+        npm install @capacitor/camera@5 @capacitor/geolocation@5
+    
+    - name: Init Capacitor
+      run: npx cap init "Bulk Meter" "com.bulkmeter.app" --web-dir=build
+    
+    - name: Add Android
+      run: npx cap add android
+    
+    - name: Sync
+      run: npx cap sync
+    
+    - name: Configure Java 17 in gradle
+      run: |
+        cd android
+        # Update root build.gradle
+        echo "allprojects { tasks.withType(JavaCompile) { options.compilerArgs << '-Xlint:-options' } }" >> build.gradle
+        # Update app build.gradle to use Java 17
+        echo "android { compileOptions { sourceCompatibility JavaVersion.VERSION_17 targetCompatibility JavaVersion.VERSION_17 } }" >> app/build.gradle
+        # Set JAVA_HOME to Java 17
+        echo "org.gradle.java.home=/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.14-7/x64" >> gradle.properties
+    
+    - name: Build APK
+      run: |
         cd android
         chmod +x gradlew
-        # Set Java compatibility to 17
-        echo "android.compileOptions.sourceCompatibility = JavaVersion.VERSION_17" >> app/build.gradle
-        echo "android.compileOptions.targetCompatibility = JavaVersion.VERSION_17" >> app/build.gradle
-        ./gradlew assembleDebug
+        ./gradlew assembleDebug --no-daemon
+      env:
+        JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.14-7/x64
+    
     - uses: actions/upload-artifact@v4
       with:
         name: app-debug
