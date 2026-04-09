@@ -8,49 +8,63 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
+    
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
-
+        node-version: '22'
+    
+    - name: Verify Node version
+      run: node --version
+    
     - name: Install dependencies
       run: npm install --legacy-peer-deps
-
+    
     - name: Build React app
       run: npm run build
       env:
         CI: false
-
+        DISABLE_ESLINT_PLUGIN: true
+    
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
-
+    
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-
+    
     - name: Install Capacitor
-      run: npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/camera @capacitor/geolocation @capacitor/network
-
+      run: |
+        npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+        npm install @capacitor/camera@6 @capacitor/geolocation@6
+        npm install @capacitor/network@6
+    
     - name: Initialize Capacitor
       run: npx cap init "Bulk Meter" "com.bulkmeter.app" --web-dir=build
-
+    
     - name: Add Android platform
       run: npx cap add android
-
+    
     - name: Sync Capacitor
       run: npx cap sync
-
+    
+    - name: Create local.properties
+      run: |
+        cd android
+        echo sdk.dir=$ANDROID_SDK_ROOT > local.properties
+    
     - name: Build APK
       run: |
-        cd android && chmod +x gradlew && ./gradlew assembleDebug
-
+        cd android
+        chmod +x gradlew
+        ./gradlew assembleDebug
+    
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
