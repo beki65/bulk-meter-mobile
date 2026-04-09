@@ -8,82 +8,51 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-    
-    - name: Install dependencies with legacy peer deps
+
+    - name: Install dependencies
       run: npm install --legacy-peer-deps
-      working-directory: ./
-    
+
     - name: Build React app
       run: npm run build
-      working-directory: ./
       env:
         CI: false
-        DISABLE_ESLINT_PLUGIN: true
-    
+
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
-    
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-    
+
     - name: Install Capacitor
-      run: |
-        npm install @capacitor/core@5.7.0 @capacitor/cli@5.7.0 @capacitor/android@5.7.0
-        npm install @capacitor/camera@5.2.0 @capacitor/geolocation@5.2.0
-      working-directory: ./
-    
+      run: npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/camera @capacitor/geolocation @capacitor/network
+
     - name: Initialize Capacitor
-      run: |
-        npx cap init "Bulk Meter" "com.bulkmeter.app" --web-dir=build
-      working-directory: ./
-    
+      run: npx cap init "Bulk Meter" "com.bulkmeter.app" --web-dir=build
+
     - name: Add Android platform
       run: npx cap add android
-      working-directory: ./
-    
+
     - name: Sync Capacitor
       run: npx cap sync
-      working-directory: ./
-    
-    - name: Create gradle.properties for Java 17
-      run: |
-        cd android
-        echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
-        echo "android.useAndroidX=true" >> gradle.properties
-        echo "android.enableJetifier=true" >> gradle.properties
-      working-directory: ./
-    
-    - name: Fix build.gradle for Java 17
-      run: |
-        cd android/app
-        # Add Java 17 compatibility to app/build.gradle
-        sed -i '/android {/a \    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }' build.gradle
-      working-directory: ./
-    
+
     - name: Build APK
       run: |
-        cd android
-        chmod +x gradlew
-        ./gradlew assembleDebug --no-daemon --stacktrace
-      working-directory: ./
-      env:
-        JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.14-7/x64
-    
-    - name: Upload Debug APK
+        cd android && chmod +x gradlew && ./gradlew assembleDebug
+
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
         path: android/app/build/outputs/apk/debug/app-debug.apk
-        if-no-files-found: warn
