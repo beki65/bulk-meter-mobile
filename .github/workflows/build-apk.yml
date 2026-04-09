@@ -16,19 +16,16 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '22'
+        node-version: '20'
     
     - name: Verify Node version
       run: node --version
     
-    - name: Install dependencies
+    - name: Install dependencies with legacy peer deps
       run: npm install --legacy-peer-deps
     
     - name: Build React app
-      run: npm run build
-      env:
-        CI: false
-        DISABLE_ESLINT_PLUGIN: true
+      run: CI=false DISABLE_ESLINT_PLUGIN=true npm run build
     
     - name: Setup Java
       uses: actions/setup-java@v4
@@ -41,9 +38,9 @@ jobs:
     
     - name: Install Capacitor
       run: |
-        npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
-        npm install @capacitor/camera@6 @capacitor/geolocation@6
-        npm install @capacitor/network@6
+        npm install --legacy-peer-deps @capacitor/core@5 @capacitor/cli@5 @capacitor/android@5
+        npm install --legacy-peer-deps @capacitor/camera@5 @capacitor/geolocation@5
+        npm install --legacy-peer-deps @capacitor/network@5
     
     - name: Initialize Capacitor
       run: npx cap init "Bulk Meter" "com.bulkmeter.app" --web-dir=build
@@ -63,7 +60,7 @@ jobs:
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleDebug
+        ./gradlew assembleDebug --no-daemon
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
