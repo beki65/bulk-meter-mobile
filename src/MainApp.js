@@ -17,7 +17,6 @@ import {
   Select,
   Card,
   CardContent,
-  Grid,
   Alert,
   Snackbar,
   IconButton,
@@ -30,7 +29,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  LinearProgress
+  LinearProgress,
+  Grid
 } from '@mui/material';
 import {
   CameraAlt as CameraIcon,
@@ -41,19 +41,25 @@ import {
   Sync as SyncIcon,
   WifiOff as OfflineIcon,
   Delete as DeleteIcon,
-  NetworkCheck as NetworkIcon,
-  DataUsage as DataIcon,
-  Warning as WarningIcon,
   Settings as SettingsIcon,
-  BugReport as BugReportIcon,
-  Close as CloseIcon
+  NetworkCheck as NetworkIcon
 } from '@mui/icons-material';
 import localforage from 'localforage';
-import axios from 'axios';
-import { useAuth } from './context/AuthContext';
-import { API_URL } from './config';
-import EnvironmentSwitcher from './components/EnvironmentSwitcher';
-import DebugScreen from './DebugScreen';
+import { Camera } from '@capacitor/camera';
+import { Geolocation } from '@capacitor/geolocation';
+import { db } from './firebase';
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  deleteDoc, 
+  doc,
+  updateDoc,
+  getDocs,
+  writeBatch
+} from 'firebase/firestore';
 
 // Configure localforage
 localforage.config({
@@ -63,133 +69,35 @@ localforage.config({
 
 const theme = createTheme({
   palette: {
-    primary: {
-      main: '#1e3a8a',
-    },
-    secondary: {
-      main: '#f57c00',
-    },
+    primary: { main: '#1e3a8a' },
+    secondary: { main: '#f57c00' },
   },
-  typography: {
-    fontSize: 14,
-  },
+  typography: { fontSize: 14 },
 });
 
 // DMA configurations
 const dmaConfigs = {
   'Jafar': {
     id: 'DMA-JFR',
-    inlets: [
-      { name: 'Bulk Didly', size: '4"' },
-      { name: 'Shemachoch', size: '3"' }
-    ],
-    outlets: [
-      { name: 'Tel', size: '6"' }
-    ]
+    inlets: [{ name: 'Bulk Didly', size: '4"' }, { name: 'Shemachoch', size: '3"' }],
+    outlets: [{ name: 'Tel', size: '6"' }]
   },
   'Yeka': {
     id: 'DMA-YKA',
-    inlets: [
-      { name: 'Misrak', size: '4"' },
-      { name: 'English', size: '3"' },
-      { name: 'Wubet', size: '2.5"' }
-    ],
+    inlets: [{ name: 'Misrak', size: '4"' }, { name: 'English', size: '3"' }, { name: 'Wubet', size: '2.5"' }],
     outlets: []
   },
   '2019 DMA': {
     id: 'DMA-2019',
-    inlets: [
-      { name: 'Inlet 1', size: 'Unknown' },
-      { name: 'Inlet 2', size: 'Unknown' }
-    ],
+    inlets: [{ name: 'Inlet 1', size: 'Unknown' }, { name: 'Inlet 2', size: 'Unknown' }],
     outlets: []
   }
 };
 
-// Custom hook for network status
-const useNetworkStatus = () => {
-  const [networkType, setNetworkType] = useState('unknown');
-  const [isConnected, setIsConnected] = useState(navigator.onLine);
-  const [isMetered, setIsMetered] = useState(false);
-  const [connectionSpeed, setConnectionSpeed] = useState(null);
-
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsConnected(true);
-      updateNetworkInfo();
-    };
-
-    const handleOffline = () => {
-      setIsConnected(false);
-    };
-
-    const updateNetworkInfo = () => {
-      if ('connection' in navigator) {
-        const connection = navigator.connection || 
-                          navigator.mozConnection || 
-                          navigator.webkitConnection;
-        
-        if (connection) {
-          setNetworkType(connection.type || 'unknown');
-          setIsMetered(connection.metered || false);
-          setConnectionSpeed(connection.downlink);
-        }
-      }
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    updateNetworkInfo();
-
-    if ('connection' in navigator) {
-      navigator.connection.addEventListener('change', updateNetworkInfo);
-    }
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      if ('connection' in navigator) {
-        navigator.connection.removeEventListener('change', updateNetworkInfo);
-      }
-    };
-  }, []);
-
-  return { networkType, isConnected, isMetered, connectionSpeed };
-};
-
-// Data usage tracker
-const useDataUsage = () => {
-  const [dataUsage, setDataUsage] = useState({ wifi: 0, mobile: 0, total: 0 });
-
-  const trackDataUsage = async (bytes, networkType) => {
-    setDataUsage(prev => {
-      const newUsage = { ...prev };
-      if (networkType === 'wifi' || networkType === 'ethernet') {
-        newUsage.wifi += bytes;
-      } else if (networkType === 'cellular') {
-        newUsage.mobile += bytes;
-      }
-      newUsage.total += bytes;
-      return newUsage;
-    });
-  };
-
-  const resetDataUsage = () => {
-    setDataUsage({ wifi: 0, mobile: 0, total: 0 });
-  };
-
-  return { dataUsage, trackDataUsage, resetDataUsage };
-};
-
-export default function MainApp() {
+function MobileApp() {
   const [currentScreen, setCurrentScreen] = useState('capture');
   const [formData, setFormData] = useState({
-    dma: '',
-    inlet: '',
-    size: '',
-    meterReading: '',
-    notes: ''
+    dma: '', inlet: '', size: '', meterReading: '', notes: ''
   });
   const [gps, setGps] = useState({ lat: null, lng: null, accuracy: null, loading: false });
   const [savedReadings, setSavedReadings] = useState([]);
@@ -197,106 +105,89 @@ export default function MainApp() {
   const [offline, setOffline] = useState(!navigator.onLine);
   const [syncing, setSyncing] = useState(false);
   const [photo, setPhoto] = useState(null);
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [dataUsageDialogOpen, setDataUsageDialogOpen] = useState(false);
-  const [showEnvSwitcher, setShowEnvSwitcher] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-  const { user, logout } = useAuth();
-  
-  const { networkType, isConnected, isMetered, connectionSpeed } = useNetworkStatus();
-  const { dataUsage, trackDataUsage, resetDataUsage } = useDataUsage();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [syncingFirestore, setSyncingFirestore] = useState(false);
 
-  // Network status
+  // Network status monitoring
   useEffect(() => {
     const handleOnline = () => setOffline(false);
     const handleOffline = () => setOffline(true);
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  // Load saved readings
+  // Load saved readings from Firestore (real-time)
   useEffect(() => {
-    loadSavedReadings();
+    const q = query(collection(db, 'readings'), orderBy('timestamp', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const readings = [];
+      snapshot.forEach((doc) => {
+        readings.push({ id: doc.id, ...doc.data() });
+      });
+      setSavedReadings(readings);
+      // Also save to localforage for offline access
+      readings.forEach(async (reading) => {
+        await localforage.setItem(reading.id, reading);
+      });
+    }, (error) => {
+      console.error('Firestore listener error:', error);
+      // Fallback to localforage if offline
+      loadLocalReadings();
+    });
+    
+    return () => unsubscribe();
   }, []);
 
-  // Show warning on mobile data
-  useEffect(() => {
-    if (networkType === 'cellular' && isMetered) {
-      showSnackbar('You are on mobile data. Large syncs may incur charges.', 'warning');
-    }
-  }, [networkType, isMetered]);
-
-  const loadSavedReadings = async () => {
+  const loadLocalReadings = async () => {
     const readings = [];
     await localforage.iterate((value, key) => {
       readings.push({ id: key, ...value });
     });
-    setSavedReadings(readings.sort((a, b) => 
-      new Date(b.timestamp) - new Date(a.timestamp)
-    ));
+    setSavedReadings(readings.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
   };
 
   const showSnackbar = (message, severity = 'success') => {
     setSnackbar({ open: true, message, severity });
   };
 
-  // GPS Capture
-  const captureGps = () => {
+  const captureGps = async () => {
     setGps(prev => ({ ...prev, loading: true }));
-
-    if (!navigator.geolocation) {
-      showSnackbar('GPS not supported', 'error');
-      setGps(prev => ({ ...prev, loading: false }));
-      return;
+    try {
+      const position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 10000
+      });
+      setGps({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        loading: false
+      });
+      showSnackbar('GPS captured successfully');
+    } catch (error) {
+      showSnackbar('Failed to get GPS: ' + error.message, 'error');
+      setGps({ lat: null, lng: null, accuracy: null, loading: false });
     }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setGps({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          loading: false
-        });
-        showSnackbar('GPS captured');
-      },
-      (error) => {
-        showSnackbar('GPS failed: ' + error.message, 'error');
-        setGps({ lat: null, lng: null, accuracy: null, loading: false });
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
   };
 
-  // Camera
-  const takePhoto = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.capture = 'environment';
-    
-    input.onchange = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (readerEvent) => {
-          setPhoto(readerEvent.target.result);
-          showSnackbar('Photo captured');
-        };
-        reader.readAsDataURL(file);
-      }
-    };
-    
-    input.click();
+  const takePhoto = async () => {
+    try {
+      const image = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: 'base64'
+      });
+      setPhoto(image.base64String);
+      showSnackbar('Photo captured');
+    } catch (error) {
+      showSnackbar('Failed to take photo', 'error');
+    }
   };
 
-  // Save reading
   const saveReading = async () => {
     if (!formData.dma || !formData.inlet || !formData.meterReading) {
       showSnackbar('Please fill all required fields', 'error');
@@ -304,163 +195,115 @@ export default function MainApp() {
     }
 
     const isOutlet = dmaConfigs[formData.dma]?.outlets.some(o => o.name === formData.inlet);
-
     const readingData = {
-      ...formData,
       dmaId: dmaConfigs[formData.dma]?.id,
+      dmaName: formData.dma,
+      pointName: formData.inlet,
+      pointType: isOutlet ? 'outlet' : 'inlet',
       meterReading: parseFloat(formData.meterReading),
-      gps: gps.lat && gps.lng ? { lat: gps.lat, lng: gps.lng } : null,
+      size: formData.size,
+      notes: formData.notes,
+      gps: gps.lat && gps.lng ? { lat: gps.lat, lng: gps.lng, accuracy: gps.accuracy } : null,
       photo: photo,
       timestamp: new Date().toISOString(),
       date: new Date().toISOString().split('T')[0],
-      synced: false,
-      isOutlet: isOutlet,
-      userId: user?._id,
-      userName: user?.name
+      syncedToCloud: !offline,
+      syncedAt: offline ? null : new Date().toISOString()
     };
 
-    console.log('💾 Saving reading:', readingData);
-
-    const id = Date.now().toString();
-    await localforage.setItem(id, readingData);
-
-    showSnackbar(offline ? 'Saved offline' : 'Saved locally');
-    
-    setFormData({ dma: '', inlet: '', size: '', meterReading: '', notes: '' });
-    setGps({ lat: null, lng: null, accuracy: null, loading: false });
-    setPhoto(null);
-    
-    loadSavedReadings();
-
-    if (!offline) {
-      syncWithServer();
-    }
-  };
-
-  // Sync a single reading
-  const syncSingleReading = async (reading) => {
     try {
-      let dmaId = 'DMA-2019';
-      if (reading.dma === 'Jafar') dmaId = 'DMA-JFR';
-      if (reading.dma === 'Yeka') dmaId = 'DMA-YKA';
-
-      const response = await axios.post(`${API_URL}/bulk-readings`, {
-        dmaId: dmaId,
-        pointName: reading.inlet,
-        meterReading: parseFloat(reading.meterReading),
-        size: reading.size || 'Unknown',
-        notes: reading.notes || '',
-        latitude: reading.gps?.lat || null,
-        longitude: reading.gps?.lng || null,
-        timestamp: reading.timestamp,
-        date: reading.date,
-        pointType: reading.isOutlet ? 'outlet' : 'inlet',
-        userId: reading.userId,
-        userName: reading.userName
-      });
-
-      const requestSize = JSON.stringify(reading).length;
-      await trackDataUsage(requestSize, networkType);
-
-      if (response.status === 201) {
-        const updated = { ...reading, synced: true };
-        await localforage.setItem(reading.id, updated);
-        return true;
-      }
-      return false;
+      // Save to Firestore (cloud)
+      const docRef = await addDoc(collection(db, 'readings'), readingData);
+      // Also save locally
+      await localforage.setItem(docRef.id, { ...readingData, id: docRef.id });
+      showSnackbar('Reading saved and synced to cloud!');
+      
+      // Reset form
+      setFormData({ dma: '', inlet: '', size: '', meterReading: '', notes: '' });
+      setGps({ lat: null, lng: null, accuracy: null, loading: false });
+      setPhoto(null);
+      
     } catch (error) {
-      console.error('❌ Sync failed:', error.message);
-      throw error;
+      console.error('Save to Firestore failed:', error);
+      // Save locally only
+      const localId = Date.now().toString();
+      await localforage.setItem(localId, { ...readingData, id: localId, syncedToCloud: false });
+      showSnackbar('Saved offline - will sync when online', 'warning');
+      
+      setFormData({ dma: '', inlet: '', size: '', meterReading: '', notes: '' });
+      setGps({ lat: null, lng: null, accuracy: null, loading: false });
+      setPhoto(null);
+      loadLocalReadings();
     }
   };
 
-  // Main sync function
-  const syncWithServer = async () => {
-    if (offline) {
-      showSnackbar('Cannot sync while offline', 'warning');
-      return;
-    }
-
-    const unsynced = savedReadings.filter(r => !r.synced);
-    if (unsynced.length === 0) {
-      showSnackbar('All readings synced', 'info');
-      return;
-    }
-
-    if (networkType === 'cellular' && isMetered && unsynced.length > 10) {
-      setSyncDialogOpen(true);
-      return;
-    }
-
-    await performSync(unsynced);
-  };
-
-  // Perform sync
-  const performSync = async (unsynced) => {
-    setSyncing(true);
+  const syncOfflineReadings = async () => {
+    setSyncingFirestore(true);
+    const offlineReadings = [];
+    
+    await localforage.iterate((value, key) => {
+      if (!value.syncedToCloud && value.timestamp) {
+        offlineReadings.push({ id: key, ...value });
+      }
+    });
+    
     let successCount = 0;
-
-    try {
-      if (networkType === 'cellular' && connectionSpeed < 0.5) {
-        for (const reading of unsynced) {
-          try {
-            await syncSingleReading(reading);
-            successCount++;
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          } catch (error) {
-            console.error('Sync failed:', error);
-          }
-        }
-      } else if (networkType === 'cellular') {
-        const batchSize = 5;
-        for (let i = 0; i < unsynced.length; i += batchSize) {
-          const batch = unsynced.slice(i, i + batchSize);
-          await Promise.all(batch.map(reading => syncSingleReading(reading)));
-          successCount += batch.length;
-        }
-      } else {
-        await Promise.all(unsynced.map(reading => syncSingleReading(reading)));
-        successCount = unsynced.length;
+    
+    for (const reading of offlineReadings) {
+      try {
+        const { id, ...readingData } = reading;
+        await addDoc(collection(db, 'readings'), {
+          ...readingData,
+          syncedToCloud: true,
+          syncedAt: new Date().toISOString()
+        });
+        await localforage.removeItem(id);
+        successCount++;
+      } catch (error) {
+        console.error('Failed to sync:', error);
       }
-
-      showSnackbar(`Synced ${successCount} of ${unsynced.length} readings`);
-    } catch (error) {
-      showSnackbar('Sync failed: ' + error.message, 'error');
-    } finally {
-      setSyncing(false);
-      await loadSavedReadings();
+    }
+    
+    setSyncingFirestore(false);
+    if (successCount > 0) {
+      showSnackbar(`Synced ${successCount} offline readings to cloud`);
     }
   };
 
-  // Delete reading
   const deleteReading = async (id) => {
-    await localforage.removeItem(id);
-    loadSavedReadings();
-    showSnackbar('Reading deleted');
+    try {
+      // Delete from Firestore
+      await deleteDoc(doc(db, 'readings', id));
+      // Delete from local storage
+      await localforage.removeItem(id);
+      showSnackbar('Reading deleted');
+    } catch (error) {
+      console.error('Delete failed:', error);
+      // If online delete fails, mark for deletion locally
+      await localforage.removeItem(id);
+      showSnackbar('Reading deleted locally', 'warning');
+    }
   };
 
-  // Format bytes
-  const formatBytes = (bytes) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
+  // Sync offline readings when back online
+  useEffect(() => {
+    if (!offline) {
+      syncOfflineReadings();
+    }
+  }, [offline]);
 
-  // Render capture screen
   const renderCaptureScreen = () => (
     <Box sx={{ p: 2 }}>
       <Paper sx={{ p: 1, mb: 2, bgcolor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box display="flex" alignItems="center">
           <NetworkIcon sx={{ mr: 1, color: offline ? 'error.main' : 'success.main' }} />
           <Typography variant="caption">
-            {offline ? 'Offline' : `${networkType} ${connectionSpeed ? `(${connectionSpeed} Mbps)` : ''}`}
+            {offline ? 'Offline Mode' : 'Cloud Connected'}
           </Typography>
         </Box>
-        <Button size="small" onClick={() => setDataUsageDialogOpen(true)} startIcon={<DataIcon />}>
-          {formatBytes(dataUsage.total)}
-        </Button>
+        <IconButton size="small" onClick={() => setSettingsOpen(true)}>
+          <SettingsIcon fontSize="small" />
+        </IconButton>
       </Paper>
 
       <FormControl fullWidth sx={{ mb: 2 }}>
@@ -492,14 +335,10 @@ export default function MainApp() {
             }}
           >
             {dmaConfigs[formData.dma].inlets.map(inlet => (
-              <MenuItem key={inlet.name} value={inlet.name}>
-                📥 {inlet.name}
-              </MenuItem>
+              <MenuItem key={inlet.name} value={inlet.name}>📥 {inlet.name}</MenuItem>
             ))}
             {dmaConfigs[formData.dma].outlets.map(outlet => (
-              <MenuItem key={outlet.name} value={outlet.name}>
-                📤 {outlet.name}
-              </MenuItem>
+              <MenuItem key={outlet.name} value={outlet.name}>📤 {outlet.name}</MenuItem>
             ))}
           </Select>
         </FormControl>
@@ -565,15 +404,9 @@ export default function MainApp() {
       </Grid>
 
       {gps.lat && (
-        <Alert severity="success" sx={{ mb: 2, py: 0.5 }}>
-          📍 GPS: ±{Math.round(gps.accuracy)}m
-        </Alert>
+        <Alert severity="success" sx={{ mb: 2 }}>📍 GPS Locked (accuracy: ±{Math.round(gps.accuracy)}m)</Alert>
       )}
-      {photo && (
-        <Alert severity="success" sx={{ mb: 2, py: 0.5 }}>
-          📸 Photo taken
-        </Alert>
-      )}
+      {photo && <Alert severity="success" sx={{ mb: 2 }}>📸 Photo captured</Alert>}
 
       <Button
         fullWidth
@@ -581,47 +414,19 @@ export default function MainApp() {
         size="large"
         startIcon={<SaveIcon />}
         onClick={saveReading}
-        disabled={syncing}
         sx={{ py: 2 }}
       >
-        {syncing ? 'Syncing...' : 'Save Reading'}
+        Save Reading
       </Button>
     </Box>
   );
 
-  // Render history screen
   const renderHistoryScreen = () => (
     <Box sx={{ p: 2 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h6">Saved Readings</Typography>
-        <Box>
-          <Button
-            size="small"
-            startIcon={<SyncIcon />}
-            onClick={syncWithServer}
-            disabled={syncing || offline}
-            sx={{ mr: 1 }}
-          >
-            {syncing ? <CircularProgress size={20} /> : 'Sync'}
-          </Button>
-          <Button
-            size="small"
-            color="error"
-            onClick={logout}
-          >
-            Logout
-          </Button>
-        </Box>
+        <Typography variant="h6">Readings</Typography>
+        {syncingFirestore && <CircularProgress size={20} />}
       </Box>
-
-      {syncing && (
-        <Box sx={{ width: '100%', mb: 2 }}>
-          <LinearProgress />
-          <Typography variant="caption" align="center" display="block">
-            Syncing... Please wait
-          </Typography>
-        </Box>
-      )}
 
       {savedReadings.length === 0 ? (
         <Alert severity="info">No readings saved</Alert>
@@ -632,7 +437,7 @@ export default function MainApp() {
               <Box display="flex" justifyContent="space-between">
                 <Box>
                   <Typography variant="subtitle2">
-                    {reading.dma} - {reading.inlet}
+                    {reading.dmaName || reading.dma} - {reading.pointName}
                   </Typography>
                   <Typography variant="body2">
                     Reading: {reading.meterReading} m³
@@ -646,14 +451,9 @@ export default function MainApp() {
                     </Typography>
                   )}
                 </Box>
-                <Box display="flex" alignItems="center">
-                  {!reading.synced && (
-                    <Chip size="small" label="Pending" color="warning" sx={{ mr: 1 }} />
-                  )}
-                  <IconButton size="small" onClick={() => deleteReading(reading.id)}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Box>
+                <IconButton size="small" onClick={() => deleteReading(reading.id)}>
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
               </Box>
             </CardContent>
           </Card>
@@ -668,15 +468,7 @@ export default function MainApp() {
       <Box sx={{ pb: 7, minHeight: '100vh', bgcolor: '#f5f5f5' }}>
         <AppBar position="sticky">
           <Toolbar>
-            <Typography variant="h6" sx={{ flexGrow: 1 }}>
-              📱 Bulk Meter {user && `- ${user.name}`}
-            </Typography>
-            <IconButton color="inherit" onClick={() => setShowEnvSwitcher(true)}>
-              <SettingsIcon />
-            </IconButton>
-            <IconButton color="inherit" onClick={() => setShowDebug(true)}>
-              <BugReportIcon />
-            </IconButton>
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>📱 Bulk Meter</Typography>
             {offline && <OfflineIcon />}
           </Toolbar>
         </AppBar>
@@ -691,112 +483,37 @@ export default function MainApp() {
           onChange={(e, newValue) => setCurrentScreen(newValue)}
           sx={{ position: 'fixed', bottom: 0, left: 0, right: 0 }}
         >
-          <BottomNavigationAction
-            label="Capture"
-            value="capture"
-            icon={<HomeIcon />}
-          />
+          <BottomNavigationAction label="Capture" value="capture" icon={<HomeIcon />} />
           <BottomNavigationAction
             label="History"
             value="history"
             icon={
-              <Badge
-                color="primary"
-                variant="dot"
-                invisible={!savedReadings.some(r => !r.synced)}
-              >
+              <Badge color="primary" variant="dot" invisible={savedReadings.length === 0}>
                 <HistoryIcon />
               </Badge>
             }
           />
         </BottomNavigation>
 
-        {/* Sync Confirmation Dialog */}
-        <Dialog open={syncDialogOpen} onClose={() => setSyncDialogOpen(false)}>
-          <DialogTitle>
-            <Box display="flex" alignItems="center">
-              <WarningIcon color="warning" sx={{ mr: 1 }} />
-              Mobile Data Warning
-            </Box>
-          </DialogTitle>
+        {/* Settings Dialog */}
+        <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Settings</DialogTitle>
           <DialogContent>
-            <Typography>
-              You are on mobile data and have {savedReadings.filter(r => !r.synced).length} unsynced readings.
-              This may use approximately{' '}
-              {formatBytes(savedReadings.filter(r => !r.synced).length * 500)} of data.
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              Data is synced to Firebase Cloud
             </Typography>
-            <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
-              Continue with sync?
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              Total Readings: {savedReadings.length}
             </Typography>
+            <Alert severity="info" sx={{ mt: 2 }}>
+              <Typography variant="caption">
+                💡 Readings are saved to Firebase Firestore<br/>
+                Works offline, syncs automatically when online
+              </Typography>
+            </Alert>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setSyncDialogOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={() => {
-                setSyncDialogOpen(false);
-                performSync(savedReadings.filter(r => !r.synced));
-              }} 
-              variant="contained"
-              color="warning"
-            >
-              Continue
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Data Usage Dialog */}
-        <Dialog open={dataUsageDialogOpen} onClose={() => setDataUsageDialogOpen(false)}>
-          <DialogTitle>Data Usage Statistics</DialogTitle>
-          <DialogContent>
-            <Box sx={{ minWidth: 300 }}>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Paper sx={{ p: 2, bgcolor: '#e3f2fd', textAlign: 'center' }}>
-                    <Typography variant="caption">WiFi</Typography>
-                    <Typography variant="h6">{formatBytes(dataUsage.wifi)}</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={6}>
-                  <Paper sx={{ p: 2, bgcolor: '#fff3e0', textAlign: 'center' }}>
-                    <Typography variant="caption">Mobile</Typography>
-                    <Typography variant="h6">{formatBytes(dataUsage.mobile)}</Typography>
-                  </Paper>
-                </Grid>
-              </Grid>
-              <Box sx={{ mt: 3, textAlign: 'center' }}>
-                <Typography variant="h6">Total: {formatBytes(dataUsage.total)}</Typography>
-              </Box>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={resetDataUsage} color="error">Reset</Button>
-            <Button onClick={() => setDataUsageDialogOpen(false)}>Close</Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Environment Switcher */}
-        {showEnvSwitcher && (
-          <EnvironmentSwitcher 
-            open={showEnvSwitcher} 
-            onClose={() => setShowEnvSwitcher(false)} 
-          />
-        )}
-
-        {/* Debug Dialog */}
-        <Dialog open={showDebug} onClose={() => setShowDebug(false)} maxWidth="md" fullWidth>
-          <DialogTitle>
-            <Box display="flex" justifyContent="space-between" alignItems="center">
-              <Typography variant="h6">Debug Information</Typography>
-              <IconButton onClick={() => setShowDebug(false)}>
-                <CloseIcon />
-              </IconButton>
-            </Box>
-          </DialogTitle>
-          <DialogContent>
-            <DebugScreen />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setShowDebug(false)}>Close</Button>
+            <Button onClick={() => setSettingsOpen(false)}>Close</Button>
           </DialogActions>
         </Dialog>
 
@@ -811,3 +528,5 @@ export default function MainApp() {
     </ThemeProvider>
   );
 }
+
+export default MobileApp;
