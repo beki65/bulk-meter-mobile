@@ -1,21 +1,5 @@
-<<<<<<< HEAD
-# Your local .gitignore content
-node_modules/
-build/
-dist/
-android/
-ios/
-*.apk
-*.aab
-.env
-.env.local
-.vscode/
-.idea/
-=======
-# Remote .gitignore content
 # Dependencies
 node_modules/
-
 
 # Build outputs
 build/
@@ -42,4 +26,3 @@ backend/.env
 # OS files
 .DS_Store
 Thumbs.db
->>>>>>> origin/master
