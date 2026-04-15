@@ -8,49 +8,60 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
+    
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-
-    - name: Install dependencies
+    
+    - name: Verify Node version
+      run: node --version
+    
+    - name: Install dependencies with legacy peer deps
       run: npm install --legacy-peer-deps
-
+    
     - name: Build React app
-      run: npm run build
-      env:
-        CI: false
-
+      run: CI=false DISABLE_ESLINT_PLUGIN=true npm run build
+    
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
-
+    
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-
+    
     - name: Install Capacitor
-      run: npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/camera @capacitor/geolocation @capacitor/network
-
+      run: |
+        npm install --legacy-peer-deps @capacitor/core@5 @capacitor/cli@5 @capacitor/android@5
+        npm install --legacy-peer-deps @capacitor/camera@5 @capacitor/geolocation@5
+        npm install --legacy-peer-deps @capacitor/network@5
+    
     - name: Initialize Capacitor
       run: npx cap init "Bulk Meter" "com.bulkmeter.app" --web-dir=build
-
+    
     - name: Add Android platform
       run: npx cap add android
-
+    
     - name: Sync Capacitor
       run: npx cap sync
-
+    
+    - name: Create local.properties
+      run: |
+        cd android
+        echo sdk.dir=$ANDROID_SDK_ROOT > local.properties
+    
     - name: Build APK
       run: |
-        cd android && chmod +x gradlew && ./gradlew assembleDebug
-
+        cd android
+        chmod +x gradlew
+        ./gradlew assembleDebug --no-daemon
+    
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
